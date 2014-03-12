@@ -4,10 +4,10 @@ A digital communications package for the Julia language.
 
 # Structure
 * Modulation
-	* PSK
-	* APSK
-	* QAM 	
+	* **PSK.jl**: Phase Shift Keying modulation/demodulation
+	* **APSK.jl**: Amplitude Phase Shift Keying modulation/demodulation
+	* **QAM.jl**: Quadrature Amplitude Modulation/demodulation 	
 * Random
-	* WGN 
+	* **WGN.jl**: White Gaussian Noise
 * Math
-	* CZT
+	* **CZT.jl**: Chirp-z Transform
