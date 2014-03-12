@@ -10,4 +10,6 @@ A digital communications package for the Julia language.
 * Random
 	* **WGN.jl**: White Gaussian Noise
 * Math
-	* **CZT.jl**: Chirp-z Transform
+  * **CZT.jl**: Chirp-z Transform
+* Support
+  * **Types.jl**: IQ
