@@ -2,7 +2,7 @@
 
 A digital communications package for the Julia language.
 
-# Structure
+## Structure
 * Modulation
 	* **PSK.jl**: Phase Shift Keying modulation/demodulation
 	* **APSK.jl**: Amplitude Phase Shift Keying modulation/demodulation
