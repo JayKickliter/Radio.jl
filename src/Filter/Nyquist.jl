@@ -5,10 +5,11 @@
 # span = filter span. How many symbols the filter should cover
 # k    = Sample period; Samples per symbol
 
-function rcos( α, span, k)
+function rcos( α, span, k )
     hlen = k*span
     hlen = iseven(hlen) ? hlen+1 : hlen
-    h = Array( Float64, hlen )
+    h    = Array( Float64, hlen )
+
     for i = 1:hlen
         t = i - 1 - (hlen - 1)/2
         if abs(α*t/k) == 0.5 # check for case where (1-(2*α*t/k)^2 is zero, which would cause divide by zero
@@ -28,10 +29,11 @@ end
 # span = filter span. How many symbols the filter should cover
 # k    = Sample period; Samples per symbol
 
-function rrcos( α, span, k)
+function rrcos( α, span, k )
     hlen = k*span
     hlen = iseven(hlen) ? hlen+1 : hlen
     h    = Array( Float64, hlen )
+    
     for i = 1:hlen
         t = i - (hlen - 1)/2 - 1 
         if t == 0
