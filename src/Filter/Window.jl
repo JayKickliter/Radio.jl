@@ -42,3 +42,9 @@ function hann( N::Integer )
     β = 0.5
     α - β*cos(2*π*n/(N-1)) + (β-α)*cos(4*π*n/(N-1))
 end
+
+#==============================================================================#
+#                                  References                                  #
+#==============================================================================#
+
+# [FIR Filters by Windowing](http://www.labbookpages.co.uk/audio/firWindowing.html)
