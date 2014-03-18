@@ -15,7 +15,7 @@ function rcos( α, span, sps )
         if abs(α*t/sps) == 0.5      # check for case where (1-(2*α*t/sps)^2 is zero, which would cause divide by zero
             h[i] = 0.5
         else
-            h[i] = sinc(t/sps)*cos(pi*α*t/sps)/(1-(2*α*t/sps)^2)
+            h[i] = sinc(t/sps)*cos(π*α*t/sps)/(1-(2*α*t/sps)^2)
         end
     end 
 
@@ -37,11 +37,11 @@ function rrcos( α, span, sps )
     for i = 1:hlen
         t = i - (hlen - 1)/2 - 1 
         if t == 0                   # full equation is undefined at t = 0
-            h[i] = (1/sqrt(sps)) * (1+α*(4/pi -1))  
+            h[i] = (1/sqrt(sps)) * (1+α*(4/π -1))  
         elseif abs(t) == sps/(4*α)  # another case when full equation is undefined
-            h[i] = (α/sqrt(2*sps)) * ( (1+(2/pi))*sin(pi/(4*α)) + (1-(2/pi))*cos(pi/(4*α)) ) 
+            h[i] = (α/sqrt(2*sps)) * ( (1+(2/π))*sin(π/(4*α)) + (1-(2/π))*cos(π/(4*α)) ) 
         else
-            h[i] = (4*α)/(pi*sqrt(sps)) * ( cos((1+α)*pi*t/sps) + (sps/(4*α*t))*sin((1-α)*pi*t/sps) ) / (1-(4*α*t/sps)^2)
+            h[i] = (4*α)/(π*sqrt(sps)) * ( cos((1+α)*π*t/sps) + (sps/(4*α*t))*sin((1-α)*π*t/sps) ) / (1-(4*α*t/sps)^2)
         end
     end
 
