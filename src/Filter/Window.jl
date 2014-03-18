@@ -36,7 +36,7 @@ end
 #                                Blackman Window                               #
 #==============================================================================#
 
-function hann( N::Integer )
+function blackaman( N::Integer )
     n = 0:N-1
     α = 0.42
     β = 0.5
