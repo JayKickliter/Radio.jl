@@ -7,7 +7,7 @@ export firdes
 # F_t    = Normalized transition frequency. CutoffFreq/SampleRate
 # window = Window function to apply to ideal truncated sinc response
 function firdes( M::Integer, F_t::Real, windowFunction::Function )
-    if F_t > 0 && F_t < 1
+    if F_t < 0 && F_t > 1
         error("F_t must be greater than 0 and less than 1")
     end
     if !method_exists( windowFunction, ())
