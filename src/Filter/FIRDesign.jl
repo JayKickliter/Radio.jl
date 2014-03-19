@@ -10,9 +10,6 @@ function firdes( M::Integer, F_t::Real, windowFunction::Function )
     if F_t < 0 && F_t > 1
         error("F_t must be greater than 0 and less than 1")
     end
-    if !method_exists( windowFunction, ())
-        error("Specified window doesn't exist. See Window.jl for valid windows")
-    end
     
     H_t = windowFunction( M )
     
