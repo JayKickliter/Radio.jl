@@ -1,13 +1,14 @@
+export blackaman, hamming, hann, kaiser, rectangular
+
 #==============================================================================#
-#                                Kaiser Window                                 #
+#                                Blackman Window                               #
 #==============================================================================#
 
-function kaiser( N::Integer, α::Real )
-    β   = π*α
-    n   = 0:N-1
-    num = besseli(0, β*sqrt(1-(2*n/(N-1)-1).^2))
-    dem = besseli(0, β)
-    num/dem
+function blackaman( N::Integer )
+    n = 0:N-1
+    α = 0.42
+    β = 0.5
+    α - β*cos(2*π*n/(N-1)) + (β-α)*cos(4*π*n/(N-1))
 end
 
 #==============================================================================#
@@ -33,18 +34,21 @@ function hann( N::Integer )
 end
 
 #==============================================================================#
-#                                Blackman Window                               #
+#                                Kaiser Window                                 #
 #==============================================================================#
 
-function blackaman( N::Integer )
-    n = 0:N-1
-    α = 0.42
-    β = 0.5
-    α - β*cos(2*π*n/(N-1)) + (β-α)*cos(4*π*n/(N-1))
+function kaiser( N::Integer, α::Real )
+    β   = π*α
+    n   = 0:N-1
+    num = besseli(0, β*sqrt(1-(2*n/(N-1)-1).^2))
+    dem = besseli(0, β)
+    num/dem
 end
 
 #==============================================================================#
-#                                  References                                  #
+#                              Rectangular Window                              #
 #==============================================================================#
 
-# [FIR Filters by Windowing](http://www.labbookpages.co.uk/audio/firWindowing.html)
+function rectangular( N::Integer )
+    ones( Float64, N )
+end
