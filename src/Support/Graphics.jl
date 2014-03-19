@@ -10,10 +10,9 @@ function plot_response( x )
         error( "To use plot_response, you must load the Winston package")
     end
     
-    truncatedLength = length(x) >> 1
     X = fft(x)
-    X = X[1:truncatedLength]
-    X = 20*log10( abs(X) )
-    f = linspace( 0.0, 1.0, truncatedLength )    
+    X = abs(X)
+    X = 20*log10( X )
+    f = linspace( -0.5, 0.5, length(X) )
     display( plot(f, X) )
 end
