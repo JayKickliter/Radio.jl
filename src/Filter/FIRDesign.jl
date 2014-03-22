@@ -1,3 +1,5 @@
+module Filter
+
 export firdes
 
 #==============================================================================#
@@ -19,3 +21,5 @@ function firdes( M::Integer, F_t::Real, windowFunction::Function )
     
     return H_t
 end
+
+end # module Filter
