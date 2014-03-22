@@ -1,3 +1,7 @@
+module Math
+
+export czt
+
 # Reference: Chirp Z-Transform Spectral Zoom Optimization with MATLAB
 # http://prod.sandia.gov/techlib/access-control.cgi/2005/057084.pdf
 
@@ -33,3 +37,5 @@ end
 function czt(x::Vector{Complex128}, m::Int)
     czt( x, m, exp(-im*2*pi/m), 1.0+0.0im)
 end
+
+end # module Math
