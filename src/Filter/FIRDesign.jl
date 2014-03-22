@@ -11,10 +11,10 @@ function firdes( M::Integer, F_t::Real, windowFunction::Function )
         error("F_t must be greater than 0 and less than 1")
     end
     
-    H_t = windowFunction( M+1 )
+    H_t = Array(Float64, M+1)
     
     for n in 0:M
-        H_t[n+1] = 2*F_t*sinc(2*F_t*(n-M/2)) * H_t[n+1]
+        H_t[n+1] = 2*F_t*sinc(2*F_t*(n-M/2)) * windowFunction(n+1, M+1)
     end
     
     return H_t
