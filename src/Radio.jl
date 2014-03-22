@@ -2,7 +2,7 @@
 
 module Radio
 
-include( "Filter/Firdesign.jl"  )
+include( "Filter/FIRDesign.jl"  )
 include( "Filter/FIRFilter.jl"  )
 include( "Filter/Nyquist.jl"    )  
 include( "Filter/Window.jl"     )
@@ -12,6 +12,16 @@ include( "Modulation/PSK.jl"    )
 include( "Random/Noise.jl"      )
 include( "Support/Types.jl"     )
 
-export pskmod
+using Radio.Math, Radio.Filter, Radio.Modulation, Radio.Random
+
+export
+    # Filter
+    firdes, rcos, rrcos, blackaman, hamming, hann, kaiser, rectangle,
+    
+    # Math
+    czt, rms,
+    
+    # Random
+    wgn
 
 end # Radio module
