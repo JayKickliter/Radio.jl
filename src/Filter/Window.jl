@@ -1,7 +1,3 @@
-module Filter
-
-export blackaman, hamming, hann, kaiser, rectangle
-
 #==============================================================================#
 #                                Blackman Window                               #
 #==============================================================================#
@@ -70,5 +66,3 @@ end
 function rectangle( N::Integer )
     ones( typeof(1.0), N )
 end
-
-end # module Filter

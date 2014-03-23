@@ -1,7 +1,3 @@
-module Filter
-
-export firdes
-
 #==============================================================================#
 #                                Windowed Filter                               #
 #==============================================================================#
@@ -15,5 +11,3 @@ function firdes( M::Integer, F_t::FloatingPoint, windowFunction::Function )
     
     [ 2*F_t*sinc(2*F_t*(n-M/2)) * windowFunction(n+1, M+1) for n = 0:M ]
 end
-
-end # module Filter

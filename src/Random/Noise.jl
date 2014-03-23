@@ -1,7 +1,3 @@
-module Random
-
-export wgn
-
 function wgn(length::Integer, power::Real=1.0, impedence::Real=1.0, units::String = "linear", returnComplex::Bool=false)
     if units == "linear"
         np = power
@@ -19,5 +15,3 @@ function wgn(length::Integer, power::Real=1.0, impedence::Real=1.0, units::Strin
 
     return noiseVec
 end
-
-end # module Random
