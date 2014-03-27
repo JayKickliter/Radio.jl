@@ -15,13 +15,13 @@ include( "Support/Graphics.jl"  )
 
 export
     # Filter
-    firdes, rcos, rrcos, blackaman, hamming, hann, kaiser, rectangle,
+    firdes, rcos, rrcos, blackman, hamming, hann, kaiser, rectangle,
     
     # Math
     czt, rms,
     
     # Random
-    wgn
+    wgn,
     
     # Support
     plot_response
