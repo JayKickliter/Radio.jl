@@ -2,13 +2,13 @@
 #                                Blackman Window                               #
 #==============================================================================#
 
-function blackaman( n::Integer, M::Integer )
+function blackman( n::Integer, M::Integer )
     α = 0.42
     β = 0.5
     α - β*cos(2*π*n/M) + (β-α)*cos(4*π*n/M)
 end
 
-function blackaman( M::Integer )
+function blackman( M::Integer )
     [ blackaman(n, M) for n = 0:M ]
 end
 
