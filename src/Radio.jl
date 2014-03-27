@@ -11,6 +11,7 @@ include( "Math/Power.jl"        )
 include( "Modulation/PSK.jl"    )
 include( "Random/Noise.jl"      )
 include( "Support/Types.jl"     )
+include( "Support/Graphics.jl"  )
 
 export
     # Filter
@@ -21,5 +22,8 @@ export
     
     # Random
     wgn
+    
+    # Support
+    plot_response
 
 end # Radio module
