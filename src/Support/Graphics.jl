@@ -2,7 +2,11 @@
 #                           Plot Frequency Response                            #
 #==============================================================================#
 # x = vector containing a filter's impulse response
-
+# 
+# Example:
+#    plot_response( firdes(0.25, kaiser(37, 5.653) ))
+# See example 7.8 in DTSP
+    
 function plot_response( x )
     if !method_exists( plot, ())
         error( "To use plot_response, you must load the Winston package")
