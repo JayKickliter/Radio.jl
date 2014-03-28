@@ -32,7 +32,7 @@ function plot_response( x )
     
     freq = FramedPlot( 
                             title  = "Frequency Response",
-                            xlabel = "Normalized Frequency",
+                            xlabel = "ƒ",
                             ylabel = "Decibels"
                         )
     add(freq, Curve(f, X))                    
