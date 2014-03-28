@@ -26,8 +26,7 @@ function plot_response( x )
                             title  = "Impulse Response",
                             xlabel = "Sample #",
                             ylabel = "Amplitude"
-                        )
-    # add(impulse, Curve(M, x))                    
+                        )             
     add(impulse, Points(M, x, kind="filled circle"))
     
     freq = FramedPlot( 
@@ -36,10 +35,10 @@ function plot_response( x )
                             ylabel = "Decibels"
                         )
     add(freq, Curve(f, X))                    
-    # add(freq, Points(f, X, kind="filled circle"))
     
     t = Table(2, 1)
     t[1,1] = impulse
     t[2,1] = freq
+
     display(t)
 end
