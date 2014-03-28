@@ -2,21 +2,24 @@
 #                                Windowed Filter                               #
 #==============================================================================#
 # M      = Filter order; Returns M+1 samples
-# F_t    = Normalized transition frequency. CutoffFreq/SampleRate
+# F_c    = Transition frequency.
 # window = Window function to apply to ideal truncated sinc response
-function firdes( M::Integer, F_t::Real, windowFunction::Function )
+# F_s    = Sample rate. Defualts to 2.
+function firdes( M::Integer, F_c::Real, windowFunction::Function, F_s::Real=2.0 )
+    F_t = F_c/F_s
     if F_t < 0 && F_t > 0.5
-        error("F_t must be > 0.0 and < 0.5")
+        error("F_c/F_s must be > 0.0 and < 0.5")
     end
     
     [ 2*F_t*sinc(2*F_t*(n-M/2)) * windowFunction(n, M) for n = 0:M ]
 end
 
-# F_t    = Normalized transition frequency. CutoffFreq/SampleRate
+# F_c    = Transition frequency.
 # window = A vector containging pre-calculated window coefficients
-function firdes( F_t::Real, window::Vector )
+function firdes( F_c::Real, window::Vector, F_s=2.0 )
+    F_t = F_c/F_s
     if F_t < 0 && F_t > 0.5
-        error("F_t must be > 0.0 and < 0.5")
+        error("F_c/F_s must be > 0.0 and < 0.5")
     end
     
     M = length( window ) - 1
