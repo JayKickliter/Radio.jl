@@ -1,5 +1,3 @@
-# /Volumes/HD1/Repositories/Radio.jl/src/Radio.jl
-
 module Radio
 
 include( "Filter/FIRDesign.jl"  )
