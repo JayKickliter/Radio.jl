@@ -38,7 +38,7 @@ end
 # returns:
 #   M = approxomate filter order,
 #     = length of filter - 1
-function kaiserord( δ::Real, Δω )    
+function kaiserord( δ::Real, Δω::Real )    
     A = -20*log10( δ )
     if A > 50
         β = 0.1102*( A - 8.7 )
