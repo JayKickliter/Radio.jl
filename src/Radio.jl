@@ -2,9 +2,11 @@ module Radio
 
 include( "Filter/FIRDesign.jl"  )
 include( "Filter/FIRFilter.jl"  )
-include( "Filter/Nyquist.jl"    )  
+include( "Filter/Nyquist.jl"    )
+include( "Filter/Resample.jl"   )
 include( "Filter/Window.jl"     )
 include( "Math/CZT.jl"          )
+include( "Math/Misc.jl"         )
 include( "Math/Power.jl"        )
 include( "Modulation/PSK.jl"    )
 include( "Random/Noise.jl"      )
@@ -13,10 +15,10 @@ include( "Support/Graphics.jl"  )
 
 export
     # Filter
-    firdes, rcos, rrcos, blackman, hamming, hann, kaiser, rectangle, kaiserord,
+    firdes, rcos, rrcos, blackman, hamming, hann, kaiser, rectangle, kaiserord, interpolate,
     
     # Math
-    czt, rms,
+    czt, rms, similarzeros,
     
     # Random
     wgn,
