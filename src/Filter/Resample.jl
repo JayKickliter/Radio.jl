@@ -1,5 +1,6 @@
-similarzeros{T}(v::Array{T}, args...) = zeros(T, args...)
-
+#==============================================================================#
+#                                  Interpolate                                 #
+#==============================================================================#
 function interpolate( x::Vector, L::Int )
     N = length( x )
     K = N*L
@@ -7,7 +8,7 @@ function interpolate( x::Vector, L::Int )
     h = similarzeros( x, K )
     
     for i = 1:N
-       h[i*L] = x[i] 
+       h[i*L-L+1] = x[i] 
     end
     
     return h
