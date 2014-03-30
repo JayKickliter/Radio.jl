@@ -15,7 +15,7 @@ include( "Support/Graphics.jl"  )
 
 export
     # Filter
-    firdes, rcos, rrcos, blackman, hamming, hann, kaiser, rectangle, kaiserord, interpolate,
+    firdes, rcos, rrcos, blackman, hamming, hann, kaiser, rectangle, kaiserord, interpolate, upsample,
     
     # Math
     czt, rms, similarzeros,
