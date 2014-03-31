@@ -1,4 +1,8 @@
-function pskmod( data, M::Integer, encoding::String )
+#==============================================================================#
+#                         Phase Shift Keying Modulation                        #
+#==============================================================================#
+
+function pskmod( data, M::Integer, encoding::String, SPS::Integer = 1, ISIFilter::Vector = [] )
     m = [ 0 : M-1 ]
     if M == 4
         Φ = pi/M
@@ -12,10 +16,20 @@ function pskmod( data, M::Integer, encoding::String )
     for i in 1:length(data)
         outputVec[i] = ideal[ data[i] + 1 ]
     end
-    return outputVec
+    
+    if SPS == 1
+        return outputVec
+    end
+
+    if ISIFilter == []        
+        ISIFilter = rcos( 0.3, 10, SPS )
+    end    
+    
+    outputVec = upsample( outputVec, SPS )
+    outputVec = filt( complex128(ISIFilter), complex128(1.0), outputVec )
 end
 
-function pskmod( M::Integer, length::Integer )
-    data = rand( 0:M-1, length )
-    pskmod( data, M, "" )
+function pskmod( symbols::Integer, M::Integer, SPS::Integer = 1, ISIFilter::Vector = [] )
+    data = rand( 0:M-1, symbols )
+    pskmod( data, M, "", SPS, ISIFilter )
 end
