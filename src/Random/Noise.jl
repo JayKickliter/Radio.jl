@@ -1,4 +1,5 @@
 function wgn(length::Integer, power::Real=1.0, impedence::Real=1.0, units::String = "linear", returnComplex::Bool=false)
+    # TODO: add argument valdiation
     if units == "linear"
         np = power
     elseif units == "dBm"
