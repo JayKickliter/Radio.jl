@@ -1,5 +1,8 @@
 module Radio
 
+# firfilt is needed by several Radio functions
+# import DSP: firfilt
+
 include( "Filter/FIRDesign.jl"  )
 include( "Filter/FIRFilter.jl"  )
 include( "Filter/Nyquist.jl"    )
