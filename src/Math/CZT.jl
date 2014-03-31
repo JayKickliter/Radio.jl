@@ -10,6 +10,8 @@
 #   m  = length of x
 #   fs = sampling rate
 function czt(x::Vector{Complex128}, m::Int, w::Complex128, a::Complex128)
+    # TODO: add argument valdiation
+    # TODO: figure out why output isn't matching FFT
     n = length(x)
     N = [0:n-1]+n
     NM = [-(n-1):(m-1)]+n
@@ -31,5 +33,6 @@ function czt(x::Vector{Complex128}, m::Int, w::Complex128, a::Complex128)
 end
 
 function czt(x::Vector{Complex128}, m::Int)
+    # TODO: add argument valdiation
     czt( x, m, exp(-im*2*pi/m), 1.0+0.0im)
 end
