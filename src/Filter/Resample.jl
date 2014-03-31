@@ -2,6 +2,7 @@
 #                                  Upsample                                    #
 #==============================================================================#
 function upsample( x::Vector, L::Int )
+    # TODO: add argument valdiation
     N = length( x )
     K = N*L
     
@@ -18,6 +19,7 @@ end
 #                                  Interpolate                                 #
 #==============================================================================#
 function interpolate( x::Vector, L::Int )
+    # TODO: add argument valdiation
     N = length( x )
     K = N*L
     

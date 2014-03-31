@@ -6,6 +6,7 @@
 # window = Window function to apply to ideal truncated sinc response
 # F_s    = Sample rate. Defualts to 2.
 function firdes( M::Integer, F_c::Real, windowFunction::Function, F_s::Real=2.0 )
+    # TODO: add argument valdiation
     F_t = F_c/F_s
     if F_t < 0 && F_t > 0.5
         error("F_c/F_s must be > 0.0 and < 0.5")
@@ -17,6 +18,7 @@ end
 # F_c    = Transition frequency.
 # window = A vector containging pre-calculated window coefficients
 function firdes( F_c::Real, window::Vector, F_s=2.0 )
+    # TODO: add argument valdiation
     F_t = F_c/F_s
     if F_t < 0 && F_t > 0.5
         error("F_c/F_s must be > 0.0 and < 0.5")
@@ -38,7 +40,8 @@ end
 # returns:
 #   M = approxomate filter order,
 #     = length of filter - 1
-function kaiserord( δ::Real, Δω::Real )    
+function kaiserord( δ::Real, Δω::Real )
+    # TODO: add argument valdiation
     A = -20*log10( δ )
     if A > 50
         β = 0.1102*( A - 8.7 )
