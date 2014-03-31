@@ -6,6 +6,7 @@
 # sps  = Samples per symbol
 
 function rcos( β, span, sps )
+    # TODO: add argument valdiation
     hlen = sps*span
     hlen = iseven(hlen) ? hlen+1 : hlen
     h    = Array( Float64, hlen )
@@ -13,7 +14,7 @@ function rcos( β, span, sps )
     for i = 1:hlen
         t = i - 1 - (hlen - 1)/2
         if abs(β*t/sps) == 0.5      # check for case where (1-(2*β*t/sps)^2 is zero, which would cause divide by zero
-            h[i] = 0.5
+            h[i] = sinc(t/sps)
         else
             h[i] = sinc(t/sps)*cos(π*β*t/sps)/(1-(2*β*t/sps)^2)
         end
@@ -30,6 +31,7 @@ end
 # sps  = Samples per symbol
 
 function rrcos( β, span, sps )
+    # TODO: add argument valdiation
     hlen = sps*span
     hlen = iseven(hlen) ? hlen+1 : hlen
     h    = Array( Float64, hlen )
