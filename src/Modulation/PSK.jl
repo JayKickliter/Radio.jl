@@ -9,7 +9,7 @@ function pskmod( data, M::Integer, encoding::String, SPS::Integer = 1, ISIFilter
     else
         Φ = 0.0
     end
-    ideal = exp(2*pi*m*im/M + Φ*im)
+    ideal = exp(2*pi*m*im/M .+ Φ*im)
 
     outputVec = Array(Complex128, length(data))
 
