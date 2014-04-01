@@ -9,9 +9,9 @@ function wgn(length::Integer, power::Real=1.0, impedence::Real=1.0, units::Strin
     end
 
     if returnComplex
-        noiseVec = sqrt(impedence*np/2) * ( randn(length) + randn(length)im )
+        noiseVec = sqrt(impedence*np) * ( randn(length) + randn(length)im )
     else
-        noiseVec = sqrt(impedence*np/2) * randn(length)
+        noiseVec = sqrt(impedence*np) * randn(length)
     end
 
     return noiseVec
