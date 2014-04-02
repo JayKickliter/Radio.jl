@@ -13,6 +13,7 @@ include( "Math/Misc.jl"         )
 include( "Math/Power.jl"        )
 include( "Modulation/PSK.jl"    )
 include( "Random/Noise.jl"      )
+include( "Support/Constants.jl" )
 include( "Support/Types.jl"     )
 include( "Support/Graphics.jl"  )
 
@@ -32,6 +33,8 @@ export
     pskmod,
     
     # Support
-    plot_response
+    plot_response,
+    POWER_VOLTS, POWER_WATTS,
+    POWER_DBM, POWER_DBW
 
 end # Radio module
