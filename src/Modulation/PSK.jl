@@ -1,6 +1,12 @@
 #==============================================================================#
 #                         Phase Shift Keying Modulation                        #
 #==============================================================================#
+# data  = Contains the integer data you want modulated.
+#           It is up to you to ensure that 
+# 
+# 
+# 
+# 
 
 function pskmod( data, M::Integer, encoding::String, SPS::Integer = 1, ISIFilter::Vector = [] )
     m = [ 0 : M-1 ]
