@@ -42,10 +42,10 @@ See `Examples/Kaiser.jl`
 ```julia
 using Radio, Winston
 
-( M, β )        = kaiserord( 0.001, 0.2*π )
-window          = kaiser( M, β )
-impulseResponse = firdes( 0.5, window )
-p               = plot_response( impulseResponse )
+( M, Beta ) = kaiserord( 0.001, 0.2*π )
+window      = kaiser( M, Beta )
+impulse     = firdes( 0.5, window )
+p           = plot_response( impulseResponse )
 
 display( p )
 ```
@@ -58,15 +58,15 @@ See `Examples/QPSK.jl`
 ```julia
 using Radio, Winston
 
-symbols       = pskmod( 10000, 4 )
-noise         = wgn( length( symbols ), 10, "dBm", 1.0, true )
-signal        = symbols .+ noise
+symbols = pskmod( 10000, 4 )
+noise   = wgn( length( symbols ), 10, "dBm", 1.0, true )
+signal  = symbols .+ noise
 
 constellation = scatter( real(signal), imag(signal), "." )
 setattr( constellation,
-            title = "QPSK Constellation",
-            xlabel = "In Phase",
-            ylabel = "Quadrature"
+            title   = "QPSK Constellation",
+            xlabel  = "In Phase",
+            ylabel  = "Quadrature"
 )                
 
 display( constellation )
