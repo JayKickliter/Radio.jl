@@ -39,7 +39,7 @@ This is a growing list of proposed functionality and package strcture.
 
 See `Examples/Kaiser.jl`
 
-```jlcon
+```julia
 using Radio, Winston
 
 ( M, β )        = kaiserord( 0.001, 0.2*π )
@@ -55,7 +55,7 @@ display( p )
 
 See `Examples/QPSK.jl`
 
-```jlcon
+```julia
 using Radio, Winston
 
 symbols       = pskmod( 10000, 4 )
