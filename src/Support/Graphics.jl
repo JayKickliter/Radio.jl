@@ -7,7 +7,7 @@ using Winston
 # x = vector containing a filter's impulse response
 # 
 # Example:
-#    plot_response( firdes(0.25, kaiser(37, 5.653) ))
+#    plot_response( firdes(0.5, kaiser(37, 5.653) ))
 # See example 7.8 in DTSP
     
 function plot_response( x )
@@ -28,6 +28,7 @@ function plot_response( x )
                             ylabel = "Amplitude"
                         )             
     add(impulse, Points(M, x, kind="filled circle"))
+    add(impulse, Curve(M, x))
     
     freq = FramedPlot( 
                             title  = "Frequency Response",
@@ -40,5 +41,5 @@ function plot_response( x )
     t[1,1] = impulse
     t[2,1] = freq
 
-    display(t)
+    return t
 end
