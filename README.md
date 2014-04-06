@@ -43,9 +43,9 @@ See `Examples/Kaiser.jl`
 using Radio, Winston
 
 ( M, Beta ) = kaiserord( 0.001, 0.2*π )
-window      = kaiser( M, Beta )
-impulse     = firdes( 0.5, window )
-p           = plot_response( impulseResponse )
+window = kaiser( M, Beta )
+impulse = firdes( 0.5, window )
+p = plot_response( impulseResponse )
 
 display( p )
 ```
@@ -59,8 +59,8 @@ See `Examples/QPSK.jl`
 using Radio, Winston
 
 symbols = pskmod( 10000, 4 )
-noise   = wgn( length( symbols ), 10, "dBm", 1.0, true )
-signal  = symbols .+ noise
+noise = wgn( length( symbols ), 10, "dBm", 1.0, true )
+signal = symbols .+ noise
 
 constellation = scatter( real(signal), imag(signal), "." )
 setattr( constellation,
