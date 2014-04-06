@@ -10,24 +10,65 @@ julia> Pkg.clone("https://github.com/JayKickliter/Radio.jl.git")
 
 ## Status ##
 
-This package is brand new as of 9 March 2014. It has almost no functionality and should not be used by anyone. That said, if you have experience in DSP, digital communications, or RF test and measurment, please feel free to contribute.
+**Radio** is in its infancy. Right now (April 2014) I'm mostly working on support functions (filtering, resampling, noise), and have only implemeted PSK modulation. That said, if you have requests or suggestions, please submit them.
 
 ## Proposed Structure ##
 
 This is a growing list of proposed functionality and package strcture.
 
 * Modulation
-	* **PSK.jl**: Phase Shift Keying modulation/demodulation
-	* **APSK.jl**: Amplitude Phase Shift Keying modulation/demodulation
-	* **QAM.jl**: Quadrature Amplitude Modulation/demodulation 	
+	* **PSK**: Phase Shift Keying modulation/demodulation
+	* **APSK**: Amplitude Phase Shift Keying modulation/demodulation
+	* **QAM**: Quadrature Amplitude Modulation/demodulation 	
 * Random
-	* **WGN.jl**: White Gaussian Noise
+	* **WGN**: White Gaussian Noise
 * Math
-  * **CZT.jl**: Chirp-z Transform
-  * **FFT.jl**: ?. Need a non-GPL FFT. Possibly a native Julia implemantation or an interface to [FFTS](https://github.com/anthonix/ffts)
-* Filter
-	* **FIR.jl**: Fir filter design and execution
-	* **Polyphase.jl**: Polyphase filter and execution
-	* **Resample.jl**: Decimation, interpolation, and rational resampling. Maybe cubic interpolation.
+  * **CZT**: Chirp-z Transform
+  * **FFT**: ?. Need a non-GPL FFT. Possibly a native Julia implemantation or an interface to [FFTS](https://github.com/anthonix/ffts)
+* Filtering
+	* **FIR**: Fir filter design and execution
+	* **Polyphase**: Polyphase filter and execution
+	* **Resampling**: Decimation, interpolation, and rational resampling. Maybe cubic interpolation.
 * Support
-  * **Types.jl**: IQ
+  * **Types**: IQ
+  * **Graphics**: Filter response, constellation plotting, eye diagram
+
+## Examples ##
+
+### FIR Filter Design With a Kaiser Window
+
+See `Examples/Kaiser.jl`
+
+```jlcon
+using Radio, Winston
+
+( M, β )        = kaiserord( 0.001, 0.2*π )
+window          = kaiser( M, β )
+impulseResponse = firdes( 0.5, window )
+p               = plot_response( impulseResponse )
+
+display( p )
+```
+![Kaiser](Examples/Kaiser.png)
+
+### QPSK Modulation ###
+
+See `Examples/QPSK.jl`
+
+```jlcon
+using Radio, Winston
+
+symbols       = pskmod( 10000, 4 )
+noise         = wgn( length( symbols ), 10, "dBm", 1.0, true )
+signal        = symbols .+ noise
+
+constellation = scatter( real(signal), imag(signal), "." )
+setattr( constellation,
+            title = "QPSK Constellation",
+            xlabel = "In Phase",
+            ylabel = "Quadrature"
+)                
+
+display( constellation )
+```
+![QPSK](Examples/QPSK.png)
