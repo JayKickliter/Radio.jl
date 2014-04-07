@@ -8,7 +8,7 @@
 # 
 # 
 
-function pskmod( data, M::Integer, encoding::String, SPS::Integer = 1, ISIFilter::Vector = [] )
+function pskmod( data, M::Integer, encoding::String = "", SPS::Integer = 1, ISIFilter::Vector = [] )
     m = [ 0 : M-1 ]
     if M == 4
         Φ = pi/M

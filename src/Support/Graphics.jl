@@ -1,6 +1,5 @@
 using Winston
 
-
 #==============================================================================#
 #                           Plot Frequency Response                            #
 #==============================================================================#
@@ -42,4 +41,20 @@ function plot_response( x )
     t[2,1] = freq
 
     return t
+end
+
+
+#==============================================================================#
+#                               Plot Constellation                             #
+#==============================================================================#
+
+function plot_constellation( symbols::Vector )
+    p = scatter(    real( symbols ),
+                    imag( symbols ),
+                    ".",
+                    xlabel = "In Phase",
+                    ylabel = "Quadrature"
+               )
+               
+    return p
 end

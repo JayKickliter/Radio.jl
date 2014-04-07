@@ -33,7 +33,7 @@ export
     pskmod,
     
     # Support
-    plot_response,
+    plot_response, plot_constellation,
     POWER_VOLTS, POWER_WATTS,
     POWER_DBM, POWER_DBW
 
