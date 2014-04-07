@@ -37,22 +37,6 @@ This is a growing list of proposed functionality and package strcture.
 
 ## Examples ##
 
-### FIR Filter Design With a Kaiser Window
-
-See `Examples/Kaiser.jl`
-
-```julia
-using Radio, Winston
-
-( M, Beta ) = kaiserord( 0.001, 0.2*π )
-window = kaiser( M, Beta )
-impulse = firdes( 0.5, window )
-p = plot_response( impulseResponse )
-
-display( p )
-```
-![Kaiser](Examples/Kaiser.png)
-
 ### QPSK Modulation ###
 
 See `Examples/QPSK.jl`
@@ -74,3 +58,42 @@ setattr( constellation,
 display( constellation )
 ```
 ![QPSK](Examples/QPSK.png)
+
+### 8-PSK Modulation ###
+
+See `Examples/8-PSK.jl`
+
+```julia
+using Radio, Winston
+
+# generate random 3 bit data modulate
+data = rand( 0:7, 10000 )
+
+# generate 10,000 random QPSK symbols
+symbols = pskmod( data, 8 )
+# create some gaussian noise and add it to the symbols
+noise  = wgn( length( symbols ), 10, "dBm", 1.0, true )
+signal = symbols .+ noise
+
+constellation = plot_constellation( signal )
+setattr( constellation, title = "8-PSK Modulation" )
+
+display( constellation )
+```
+![8-PSK](Examples/8-PSK.png)
+
+### FIR Filter Design With a Kaiser Window ###
+
+See `Examples/Kaiser.jl`
+
+```julia
+using Radio, Winston
+
+( M, Beta ) = kaiserord( 0.001, 0.2*π )
+window = kaiser( M, Beta )
+impulse = firdes( 0.5, window )
+p = plot_response( impulseResponse )
+
+display( p )
+```
+![Kaiser](Examples/Kaiser.png)
