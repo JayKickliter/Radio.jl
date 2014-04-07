@@ -4,7 +4,7 @@ A digital communications package for the Julia language.
 
 ## Installation ##
 
-**Radio** is not yet registered with the Julia package mackamager, so it needs to cloned:
+**Radio** is not yet registered with the Julia package manager, so it needs to cloned:
 
 ```jlcon
 julia> Pkg.clone("https://github.com/JayKickliter/Radio.jl.git")
