@@ -48,7 +48,7 @@ end
 #                               Plot Constellation                             #
 #==============================================================================#
 
-function plot_constellation( symbols::Vector )
+function plot_constellation( symbols::Vector{Complex} )
     p = scatter(    real( symbols ),
                     imag( symbols ),
                     ".",
