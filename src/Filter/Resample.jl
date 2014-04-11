@@ -18,7 +18,7 @@ end
 #==============================================================================#
 #                                  Interpolate                                 #
 #==============================================================================#
-function interpolate( x::Vector, L::Int )
+function interpolate( x::Vector, L::Int, Filter::Vector )
     # TODO: add argument valdiation
     N = length( x )
     K = N*L
@@ -29,5 +29,5 @@ function interpolate( x::Vector, L::Int )
        h[i*L-L+1] = x[i] 
     end
     
-    return h
+    h = filt( complex128( Filter ), complex128(1.0), h )
 end
