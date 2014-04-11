@@ -31,8 +31,8 @@ function plot_response( x )
     
     freq = FramedPlot( 
                             title  = "Frequency Response",
-                            xlabel = "ƒ",
-                            ylabel = "Decibels"
+                            xlabel = "ƒ_{Nyquist}",
+                            ylabel = "dB"
                         )
     add(freq, Curve(f, X))                    
     
@@ -49,8 +49,7 @@ end
 #==============================================================================#
 
 function plot_constellation( symbols::Vector )
-    p = scatter(    real( symbols ),
-                    imag( symbols ),
+    p = scatter(    symbols,
                     ".",
                     xlabel = "In Phase",
                     ylabel = "Quadrature"
