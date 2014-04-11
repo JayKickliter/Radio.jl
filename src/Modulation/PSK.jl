@@ -31,8 +31,7 @@ function pskmod( data, M::Integer, encoding::String = "", SPS::Integer = 1, ISIF
         ISIFilter = rcos( 0.3, 10, SPS )
     end    
     
-    outputVec = upsample( outputVec, SPS )
-    outputVec = filt( complex128(ISIFilter), complex128(1.0), outputVec )
+    outputVec = interpolate( outputVec, SPS, ISIFilter )
 end
 
 function pskmod( symbols::Integer, M::Integer, SPS::Integer = 1, ISIFilter::Vector = [] )
