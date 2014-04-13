@@ -19,6 +19,7 @@ include( "Support/Graphics.jl"  )
 
 export
     # Filter
+    FIR_TYPE, firprototype,
     firdes, rcos, rrcos, blackman,
     hamming, hann, kaiser, rectangle,
     kaiserord, interpolate, upsample,

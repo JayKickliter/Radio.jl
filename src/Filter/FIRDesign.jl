@@ -1,4 +1,37 @@
 #==============================================================================#
+#                               Constants/Enums                                #
+#==============================================================================#
+module FIR_TYPE
+const LOW_PASS    = 0
+const BAND_PASS   = 1
+const HIGH_PASS   = 2
+const BAND_REJECT = 3
+end
+
+
+#==============================================================================#
+#                             Prototype FIR Filter                             #
+#==============================================================================#
+# M       = Filter order; Returns M+1 samples
+# F       = Cutoff frequency. Real for high-pass & lowpass, Vector{Real} for
+#           band-pass & band-reject
+# FIRType = Type of filter: FIR_TYPE.LOW_PASS, FIR_TYPE.BAND_PASS,
+#           FIR_TYPE.BAND_REJECT
+function firprototype( M::Integer, F::Union(Real, Vector), FIRType::Integer )
+    if     FIRType == FIR_TYPE.LOW_PASS
+        return [ 2*F*sinc(2*F*(n-M/2)) for n = 0:M ]
+    elseif FIRType == FIR_TYPE.BAND_PASS
+
+    elseif FIRType == FIR_TYPE.HIGH_PASS
+        return [ sinc(n-M/2) - 2*F*sinc(2*F*(n-M/2)) for n = 0:M ]        
+    elseif FIRType == FIR_TYPE.BAND_REJECT
+        
+    end
+end
+
+
+
+#==============================================================================#
 #                                Windowed Filter                               #
 #==============================================================================#
 # M      = Filter order; Returns M+1 samples
@@ -8,7 +41,7 @@
 function firdes( M::Integer, F_c::Real, windowFunction::Function, F_s::Real=2.0 )
     # TODO: add argument valdiation
     F_t = F_c/F_s
-    if F_t < 0 && F_t > 0.5
+    if F_t < 0 || F_t > 0.5
         error("F_c/F_s must be > 0.0 and < 0.5")
     end
     
@@ -20,7 +53,7 @@ end
 function firdes( F_c::Real, window::Vector, F_s=2.0 )
     # TODO: add argument valdiation
     F_t = F_c/F_s
-    if F_t < 0 && F_t > 0.5
+    if F_t < 0 || F_t > 0.5
         error("F_c/F_s must be > 0.0 and < 0.5")
     end
     
