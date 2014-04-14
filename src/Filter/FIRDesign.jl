@@ -17,6 +17,8 @@ end
 #           band-pass & band-reject
 # FIRType = Type of filter: FIR_TYPE.LOW_PASS, FIR_TYPE.BAND_PASS,
 #           FIR_TYPE.BAND_REJECT
+# 
+# Reference(s): [3]
 function firprototype( M::Integer, F::Union(Real, Vector), FIRType::Integer )
     if     FIRType == FIR_TYPE.LOW_PASS
         return [ 2*F*sinc(2*F*(n-M/2)) for n = 0:M ]
@@ -26,7 +28,6 @@ function firprototype( M::Integer, F::Union(Real, Vector), FIRType::Integer )
         return [ sinc(n-M/2) - 2*F*sinc(2*F*(n-M/2)) for n = 0:M ]        
     elseif FIRType == FIR_TYPE.BAND_STOP
         return [ 2*(F[2]*sinc(2*F[2]*(n-M/2)) - F[1]*sinc(2*F[1]*(n-M/2))) for n = 0:M ]
-        
     else
         error("Not a valid FIR_TYPE")
     end
