@@ -2,10 +2,10 @@
 #                               Constants/Enums                                #
 #==============================================================================#
 module FIR_TYPE
-const LOW_PASS    = 0
-const BAND_PASS   = 1
-const HIGH_PASS   = 2
-const BAND_REJECT = 3
+const LOW_PASS  = 0
+const BAND_PASS = 1
+const HIGH_PASS = 2
+const BAND_STOP = 3
 end
 
 
@@ -21,11 +21,14 @@ function firprototype( M::Integer, F::Union(Real, Vector), FIRType::Integer )
     if     FIRType == FIR_TYPE.LOW_PASS
         return [ 2*F*sinc(2*F*(n-M/2)) for n = 0:M ]
     elseif FIRType == FIR_TYPE.BAND_PASS
-
+        return [ 2*(F[1]*sinc(2*F[1]*(n-M/2)) - F[2]*sinc(2*F[2]*(n-M/2))) for n = 0:M ]        
     elseif FIRType == FIR_TYPE.HIGH_PASS
         return [ sinc(n-M/2) - 2*F*sinc(2*F*(n-M/2)) for n = 0:M ]        
-    elseif FIRType == FIR_TYPE.BAND_REJECT
+    elseif FIRType == FIR_TYPE.BAND_STOP
+        return [ 2*(F[2]*sinc(2*F[2]*(n-M/2)) - F[1]*sinc(2*F[1]*(n-M/2))) for n = 0:M ]
         
+    else
+        error("Not a valid FIR_TYPE")
     end
 end
 
