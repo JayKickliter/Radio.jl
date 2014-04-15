@@ -1,7 +1,7 @@
 using Winston
 
 #==============================================================================#
-#                           Plot Frequency Response                            #
+#                 Plot Filter's Impulse & Frequency Response                   #
 #==============================================================================#
 # x = vector containing a filter's impulse response
 # 
