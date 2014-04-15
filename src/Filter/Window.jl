@@ -11,7 +11,7 @@ end
 
 function blackman( M::Integer )
     # TODO: add argument valdiation
-    [ blackaman(n, M) for n = 0:M ]
+    [ blackman(n, M) for n = 0:M ]
 end
 
 #==============================================================================#

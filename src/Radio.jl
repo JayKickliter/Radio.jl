@@ -19,13 +19,24 @@ include( "Support/Graphics.jl"  )
 
 export
     # Filter
-    FIR_TYPE, firprototype,
-    firdes, rcos, rrcos, blackman,
-    hamming, hann, kaiser, rectangle,
-    kaiserord, interpolate, upsample,
+    FIR_TYPE,
+    firprototype,
+    firdes,
+    rcos,
+    rrcos,
+    blackman,
+    hamming,
+    hann,
+    kaiser,
+    rectangle,
+    kaiserord,
+    interpolate,
+    upsample,
     
     # Math
-    czt, rms, similarzeros,
+    czt,
+    rms,
+    similarzeros,
     
     # Random
     wgn,
@@ -34,8 +45,11 @@ export
     pskmod,
     
     # Support
-    plot_response, plot_constellation,
-    POWER_VOLTS, POWER_WATTS,
-    POWER_DBM, POWER_DBW
+    plot_response,
+    plot_constellation,
+    POWER_VOLTS,
+    POWER_WATTS,
+    POWER_DBM,
+    POWER_DBW
 
 end # Radio module
