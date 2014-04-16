@@ -1,7 +1,7 @@
 using Radio, Winston
 
-( M, β )        = kaiserord( 0.001, 0.2*π )
-window          = kaiser( M, β )
+( N, β )        = kaiserord( 0.001, 0.2*π )
+window          = kaiser( N, β )
 impulseResponse = firdes( 0.5, window )
 p               = plot_response( impulseResponse )
 
