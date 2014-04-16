@@ -3,12 +3,12 @@
 #==============================================================================#
 function upsample( x::Vector, L::Int )
     # TODO: add argument valdiation
-    N = length( x )
-    K = N*L
+    M = length( x )
+    K = M*L
     
     h = similarzeros( x, K )
     
-    for i = 1:N
+    for i = 1:M
        h[i*L-L+1] = x[i] 
     end
     
@@ -20,12 +20,12 @@ end
 #==============================================================================#
 function interpolate( x::Vector, L::Int, Filter::Vector )
     # TODO: add argument valdiation
-    N = length( x )
-    K = N*L
+    M = length( x )
+    K = M*L
     
     h = similarzeros( x, K )
     
-    for i = 1:N
+    for i = 1:M
        h[i*L-L+1] = x[i] 
     end
     

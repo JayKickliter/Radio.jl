@@ -12,22 +12,22 @@ end
 #==============================================================================#
 #                             Prototype FIR Filter                             #
 #==============================================================================#
-# M       = Filter order; Returns M+1 samples
+# N       = Filter order; Returns N+1 samples
 # F       = Cutoff frequency. Real for high-pass & lowpass, Vector{Real} for
 #           band-pass & band-reject
 # FIRType = Type of filter: FIR_TYPE.LOW_PASS, FIR_TYPE.BAND_PASS,
 #           FIR_TYPE.BAND_REJECT
 # 
 # Reference(s): [3]
-function firprototype( M::Integer, F::Union(Real, Vector), FIRType::Integer )
+function firprototype( N::Integer, F::Union(Real, Vector), FIRType::Integer )
     if     FIRType == FIR_TYPE.LOW_PASS
-        return [ 2*F*sinc(2*F*(n-M/2)) for n = 0:M ]
+        return [ 2*F*sinc(2*F*(n-N/2)) for n = 0:N ]
     elseif FIRType == FIR_TYPE.BAND_PASS
-        return [ 2*(F[1]*sinc(2*F[1]*(n-M/2)) - F[2]*sinc(2*F[2]*(n-M/2))) for n = 0:M ]        
+        return [ 2*(F[1]*sinc(2*F[1]*(n-N/2)) - F[2]*sinc(2*F[2]*(n-N/2))) for n = 0:N ]        
     elseif FIRType == FIR_TYPE.HIGH_PASS
-        return [ sinc(n-M/2) - 2*F*sinc(2*F*(n-M/2)) for n = 0:M ]        
+        return [ sinc(n-N/2) - 2*F*sinc(2*F*(n-N/2)) for n = 0:N ]        
     elseif FIRType == FIR_TYPE.BAND_STOP
-        return [ 2*(F[2]*sinc(2*F[2]*(n-M/2)) - F[1]*sinc(2*F[1]*(n-M/2))) for n = 0:M ]
+        return [ 2*(F[2]*sinc(2*F[2]*(n-N/2)) - F[1]*sinc(2*F[1]*(n-N/2))) for n = 0:N ]
     else
         error("Not a valid FIR_TYPE")
     end
@@ -38,18 +38,18 @@ end
 #==============================================================================#
 #                                Windowed Filter                               #
 #==============================================================================#
-# M      = Filter order; Returns M+1 samples
+# N      = Filter order; Returns N+1 samples
 # F_c    = Transition frequency.
 # window = Window function to apply to ideal truncated sinc response
 # F_s    = Sample rate. Defualts to 2.
-function firdes( M::Integer, F_c::Real, windowFunction::Function, F_s::Real=2.0 )
+function firdes( N::Integer, F_c::Real, windowFunction::Function, F_s::Real=2.0 )
     # TODO: add argument valdiation
     F_t = F_c/F_s
     if F_t < 0 || F_t > 0.5
         error("F_c/F_s must be > 0.0 and < 0.5")
     end
     
-    [ 2*F_t*sinc(2*F_t*(n-M/2)) * windowFunction(n, M) for n = 0:M ]
+    [ 2*F_t*sinc(2*F_t*(n-N/2)) * windowFunction(n, N) for n = 0:N ]
 end
 
 # F_c    = Transition frequency.
@@ -61,9 +61,9 @@ function firdes( F_c::Real, window::Vector, F_s=2.0 )
         error("F_c/F_s must be > 0.0 and < 0.5")
     end
     
-    M = length( window ) - 1
+    N = length( window ) - 1
     
-    [ 2*F_t*sinc(2*F_t*(n-M/2)) * window[n+1] for n = 0:M ]
+    [ 2*F_t*sinc(2*F_t*(n-N/2)) * window[n+1] for n = 0:N ]
 end
 
 
@@ -75,7 +75,7 @@ end
 #    = transition width in radians 
 # 
 # returns:
-#   M = approxomate filter order,
+#   N = approxomate filter order,
 #     = length of filter - 1
 function kaiserord( δ::Real, Δω::Real )
     # TODO: add argument valdiation
@@ -87,7 +87,7 @@ function kaiserord( δ::Real, Δω::Real )
     else
         β = 0.0
     end
-    M = int(ceil( ( A - 7.95 )/( 2.285 * Δω )))
+    N = int(ceil( ( A - 7.95 )/( 2.285 * Δω )))
 
-    return ( M, β )
+    return ( N, β )
 end
