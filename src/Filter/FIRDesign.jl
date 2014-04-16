@@ -12,7 +12,9 @@ end
 #==============================================================================#
 #                             Prototype FIR Filter                             #
 #==============================================================================#
-# N       = Filter order; Returns N+1 samples
+# N       = Filter order; Returns M (N+1) samples
+#         = If FIRType is HIGH_PASS, may return M+1 (N+2) samples to make it
+#           a type 1 filter.
 # F       = Cutoff frequency. Real for high-pass & lowpass, Vector{Real} for
 #           band-pass & band-reject
 # FIRType = Type of filter: FIR_TYPE.LOW_PASS, FIR_TYPE.BAND_PASS,
@@ -25,6 +27,7 @@ function firprototype( N::Integer, F::Union(Real, Vector), FIRType::Integer )
     elseif FIRType == FIR_TYPE.BAND_PASS
         return [ 2*(F[1]*sinc(2*F[1]*(n-N/2)) - F[2]*sinc(2*F[2]*(n-N/2))) for n = 0:N ]        
     elseif FIRType == FIR_TYPE.HIGH_PASS
+        N = isodd( N ) ? N+1 : N 
         return [ sinc(n-N/2) - 2*F*sinc(2*F*(n-N/2)) for n = 0:N ]        
     elseif FIRType == FIR_TYPE.BAND_STOP
         return [ 2*(F[2]*sinc(2*F[2]*(n-N/2)) - F[1]*sinc(2*F[1]*(n-N/2))) for n = 0:N ]
