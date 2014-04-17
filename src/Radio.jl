@@ -47,6 +47,7 @@ export
     # Support
     plot_response,
     plot_constellation,
+    plot_spectrum,
     POWER_VOLTS,
     POWER_WATTS,
     POWER_DBM,

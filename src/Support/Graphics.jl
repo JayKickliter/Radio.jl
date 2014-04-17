@@ -1,4 +1,5 @@
 using Winston
+import DSP: periodogram
 
 #==============================================================================#
 #                 Plot Filter's Impulse & Frequency Response                   #
@@ -54,7 +55,7 @@ function plot_constellation( symbols::Vector )
                     xlabel = "In Phase",
                     ylabel = "Quadrature"
                )
-               
+
     return p
 end
 
@@ -64,4 +65,20 @@ end
 #                                Plot Spectrum                                 #
 #==============================================================================#
 
+function plot_spectrum( signal::Vector )
+    spectrum = periodogram( signal )
+    spectrum = 10*log10( spectrum.^2 ) 
+    spectrum = fftshift( spectrum )
+    
+    frequencies = linspace( -1, 1, length(spectrum) )
+    
+    spectrum_plot = FramedPlot( 
+                            title  = "Spectrum",
+                            xlabel = "f",
+                            ylabel = "dB"
+                        )
+    add(spectrum_plot, Curve( frequencies, spectrum ))
+    
+    return spectrum_plot
+end    
 # plot(10*log10(fftshift(welch_pgram(pskmod(100000,4,4,rrcos(0.35,100,4)).+wgn(400000, 10, "dBm"), 250, 125))))
