@@ -13,15 +13,15 @@ function czt(x::Vector{Complex128}, m::Int, w::Complex128, a::Complex128)
     # TODO: add argument valdiation
     # TODO: figure out why output isn't matching FFT
     n = length(x)
-    N = [0:n-1]+n
-    NM = [-(n-1):(m-1)]+n
-    M = [0:m-1]+n
+    N = [0:n-1].+n
+    NM = [-(n-1):(m-1)].+n
+    M = [0:m-1].+n
 
     nfft = nextpow2(n+m-1)
     W2 = w.^(([-(n-1):max(m-1,n-1)].^2)/2)
 
     fg = zeros(Complex128, nfft)
-    fg[1:n] = x.*(a.^-(N-n)).*W2[N]
+    fg[1:n] = x.*(a.^-(N.-n)).*W2[N]
     fg = fft(fg)
 
     fw = zeros(Complex128, nfft)
