@@ -10,3 +10,4 @@ constellation = plot_constellation( signal )
 setattr( constellation, title = "QPSK Modulation" )
 
 display( constellation )
+file( constellation, "QPSK.png" )
