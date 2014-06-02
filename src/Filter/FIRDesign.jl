@@ -1,4 +1,13 @@
 #==============================================================================#
+#                                    Types                                     #
+#==============================================================================#
+type FIRFilter
+    coefficients::Vector
+end
+
+
+
+#==============================================================================#
 #                               Constants/Enums                                #
 #==============================================================================#
 module FIR_TYPE
@@ -52,7 +61,7 @@ function firdes( N::Integer, F_c::Real, windowFunction::Function, F_s::Real=2.0 
         error("F_c/F_s must be > 0.0 and < 0.5")
     end
     
-    [ 2*F_t*sinc(2*F_t*(n-N/2)) * windowFunction(n, N) for n = 0:N ]
+    FIRFilter([ 2*F_t*sinc(2*F_t*(n-N/2)) * windowFunction(n, N) for n = 0:N ])
 end
 
 # F_c    = Transition frequency.
@@ -66,7 +75,7 @@ function firdes( F_c::Real, window::Vector, F_s=2.0 )
     
     N = length( window ) - 1
     
-    [ 2*F_t*sinc(2*F_t*(n-N/2)) * window[n+1] for n = 0:N ]
+    FIRFilter([ 2*F_t*sinc(2*F_t*(n-N/2)) * window[n+1] for n = 0:N ])
 end
 
 
