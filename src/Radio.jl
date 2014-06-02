@@ -45,7 +45,7 @@ export
     pskmod,
     
     # Support
-    plot_response,
+    freqz,
     plot_constellation,
     plot_spectrum,
     POWER_VOLTS,
