@@ -1,20 +1,27 @@
 import Radio
 import Winston
 
-interp_ratio = 4
+mod_order    = 4
+interp_ratio = 2
+symbol_count = 1000
+plot_filename = "CZT Resampling.png"
+
+# generate random data, make it non-square so it's easier to see of we downsampled correctly
+data = rand( 0:mod_order-2, symbol_count )
 
 # generate 1e3 random QPSK symbols
-symbols = Radio.pskmod( 1000, 4, 1 )
+symbols = Radio.pskmod( data, 4 )
 
 # generate root-cosine nyquist filter coefficients
-nyq_coef = Radio.rcos(0.1, 4 .* interp_ratio, interp_ratio)
+nyq_coef = Radio.rcos(0.35, 4 .* interp_ratio, interp_ratio)
+nyq_coef = nyq_coef ./ sum( nyq_coef )
 
 # interpolate symbols using the nyquest filter we just created
 symbols_interp = Radio.interpolate( symbols, interp_ratio, nyq_coef )
 
 # create some gaussian noise and add it to interpolated symbols
-noise  = Radio.wgn( length( symbols_interp ), -10, "dBm", 1.0, true )
-signal = symbols_interp #.+ noise
+noise  = Radio.wgn( length( symbols_interp ), 0, "dBm", 1.0, true )
+signal = symbols_interp .+ noise
 
 constellation_base = Radio.plot_constellation( symbols )
 Winston.setattr( constellation_base, title = "Baseband QPSK" )
@@ -38,7 +45,7 @@ Winston.setattr( spectrum_interp, title = @sprintf("L=%d Interpolated QPSK Spect
 #   m  = length of x
 #   fs = sampling rate
 
-m  = int( length( signal ) / interp_ratio )
+m  = symbol_count
 f1 = -0.5
 f2 =  0.5
 fs = interp_ratio
@@ -47,7 +54,7 @@ A  = exp(im*2*pi*f1/fs)
 
 spectrum_czt = Radio.czt( signal, m, W, A )
 # spectrum_czt = Radio.czt( signal, length(signal)) 
-signal_decim = ifft( spectrum_czt )
+signal_decim = ifft( fftshift(spectrum_czt) )[interp_ratio*4:end]
 
 
 constellation_decim = Radio.plot_constellation( signal_decim )
@@ -64,4 +71,6 @@ t[2,2] = spectrum_interp
 t[3,1] = constellation_decim
 t[3,2] = spectrum_decim
 
-display( t )
+Winston.display( t )
+Winston.file( t, joinpath( dirname(Base.source_path()), plot_filename ) )
+
