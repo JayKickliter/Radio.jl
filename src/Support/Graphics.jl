@@ -10,11 +10,11 @@ import DSP
 #    plot_response( firdes(0.5, kaiser(37, 5.653) ))
 # See example 7.8 in DTSP
     
-function freqz( FIR::FIRFilter )
+function freqz( coefficients::Vector )
     if !method_exists( Winston.plot, ())
         error( "To use plot_response, you must load the Winston package")
     end
-    x  = FIR.coefficients
+    x  = coefficients
     xx = [x, zeros(1024 - length(x))]
     M  = [0:length(x) - 1]
     n  = int(ceil(length( x )/2))
@@ -44,6 +44,10 @@ function freqz( FIR::FIRFilter )
     t[2,1] = freq
 
     return t
+end
+
+function freqz( FIR::FIRFilter )
+   freqz( FIR.coefficients ) 
 end
 
 
