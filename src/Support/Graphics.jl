@@ -24,7 +24,7 @@ function plot_response( x )
     
     impulse = FramedPlot( 
                             title  = "Impulse Response",
-                            xlabel = "Sample #",
+                            xlabel = "Tap Index",
                             ylabel = "Amplitude"
                         )             
     add(impulse, Points(M, x, kind="filled circle"))
