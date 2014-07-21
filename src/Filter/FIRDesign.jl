@@ -1,11 +1,46 @@
+import DSP: firfilt
+
 #==============================================================================#
 #                                    Types                                     #
 #==============================================================================#
-type FIRFilter
-    coefficients::Vector
+abstract Filter
+abstract FIRKernel
+
+# Single rate FIR kernel, just hold filter taps
+type FIRKernelSingleRate <: FIRKernel
+    taps::Vector
+end
+
+# Multirate FIR kernels, holds a polyphase filter bank
+type FIRKernelInterpolator <: FIRKernel
+    PFB::Matrix
+    interploation::Int
+end
+
+type FIRFilter <: Filter
+    kernel::FIRKernel
+    state::Vector
 end
 
 
+function FIRFilter{Tx}( ::Type{Tx}, taps::Vector )
+    Nt     = length( taps )
+    state  = zeros( Tx, Nt-1 )
+    kernel = FIRKernelSingleRate( taps )
+    FIRFilter( kernel, state )
+end
+
+FIRFilter{Tt}( taps::Vector{Tt} ) = FIRFilter( Tt, taps )
+
+function FIRFilter{Tx}( ::Type{Tx}, taps::Vector, interploation::Integer )
+    PFB    = polyize( taps, interploation )
+    Ns     = size( PFB )[1]
+    state  = zeros( Tx, Ns )
+    kernel = FIRKernelInterpolator( PFB, interploation )
+    FIRFilter( kernel, state )
+end
+
+FIRFilter{Tt}( taps::Vector{Tt}, interploation::Integer ) = FIRFilter( Tt, taps, interploation )
 
 #==============================================================================#
 #                               Constants/Enums                                #
@@ -61,7 +96,7 @@ function firdes( N::Integer, F_c::Real, windowFunction::Function, F_s::Real=2.0 
         error("F_c/F_s must be > 0.0 and < 0.5")
     end
     
-    FIRFilter([ 2*F_t*sinc(2*F_t*(n-N/2)) * windowFunction(n, N) for n = 0:N ])
+    [ 2*F_t*sinc(2*F_t*(n-N/2)) * windowFunction(n, N) for n = 0:N ]
 end
 
 # F_c    = Transition frequency.
@@ -75,7 +110,7 @@ function firdes( F_c::Real, window::Vector, F_s=2.0 )
     
     N = length( window ) - 1
     
-    FIRFilter([ 2*F_t*sinc(2*F_t*(n-N/2)) * window[n+1] for n = 0:N ])
+    [ 2*F_t*sinc(2*F_t*(n-N/2)) * window[n+1] for n = 0:N ]
 end
 
 
