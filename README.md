@@ -14,6 +14,8 @@ julia> Pkg.clone("https://github.com/JayKickliter/Radio.jl.git")
 
 **Radio** is in its infancy. Right now (April 2014) I'm mostly working on support functions (filtering, resampling, noise), and have only implemeted PSK modulation. That said, if you have requests or suggestions, please submit them.
 
+*Jul 2014 Updtae:* This package has definitely not been abaadonded. I've just been creating core Julia DSP code outside of it, which is why there haven't been any commits lately. I also didn't want to burdened down the line with poor design choices, so I've been getting a little more versed in Julia the last couple months.
+
 ## Proposed Structure ##
 
 This is a growing list of proposed functionality and package strcture.
