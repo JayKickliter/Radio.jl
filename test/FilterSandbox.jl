@@ -46,6 +46,7 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, M::Integer
     return buffer
 end
 
+
 decimate{T}( h::Vector{T}, x::Vector{T}, M::Integer ) = decimate!( similar(x, int(length(x)/M)), h::Vector{T}, x::Vector{T}, M::Integer )
 
 
@@ -64,7 +65,7 @@ function testdecimate( Th, Tx, hLen, xLen, factor )
     # areApprox( nativeBuffer, ippBuffer )
 end
 
-factor = 7
+factor = 17
 xLen   = int(1e6*factor)
 hLen   = 32
 @profile testdecimate( Float32, Float32, 32, xLen, factor )

@@ -152,33 +152,26 @@ resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-function decimate{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, M::Integer )
-    xLen   = length( x )    
-    hLen   = length( h )
-    bufLen = length( bufLen )
-    yLen   = int(xLen / M)    
+function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, M::Integer )
+    (xLen   = length( x )) % M      == 0    || error( "signal length % decimation must be 0" )
+    (bufLen = length( buffer )) * M >= xLen || error( "buffer lenght must be >= signal length * decimation" )        
+    hLen    = length( h )
+    yLen    = int(xLen / M)    
     
-    xLen   % M == 0     || error( "signal length % decimation must be 0" )
-    bufLen * M >= xLen  || error( "buffer lenght must be >= signal length * decimation" )
-    b
     
-    y    = Array( T, yLen ) # yLen = xLen * Nφ
-
-    criticalYidx = int(ceil(hLen / M))
-        
+    criticalYidx = int(ceil(hLen / M)) # The index of y where our taps would overlap
     xIdx = 1
     
     for yIdx = 1:criticalYidx
             
         acc  = zero(T)
-        
         kMax = xIdx < hLen ? xIdx : hLen
                 
         for k = 1:kMax
             @inbounds acc += h[ k ] * x[ xIdx+1-k ]
         end
         
-        @inbounds y[yIdx] = acc
+        @inbounds buffer[yIdx] = acc
         xIdx += M
     end
     
@@ -194,9 +187,11 @@ function decimate{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, M::Integer 
             @inbounds acc += h[ k ] * x[ xIdx+k ]
         end
         
-        @inbounds y[yIdx] = acc
+        @inbounds buffer[yIdx] = acc
         xIdx += M
     end
         
-    return y
+    return buffer
 end
+
+decimate{T}( h::Vector{T}, x::Vector{T}, M::Integer ) = decimate!( similar(x, int(length(x)/M)), h::Vector{T}, x::Vector{T}, M::Integer )
