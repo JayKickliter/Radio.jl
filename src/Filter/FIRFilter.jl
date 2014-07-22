@@ -142,6 +142,7 @@ function resample{T}( PFB::Array{T, 2}, x::Vector{T}, ratio::Rational )
     return y
 end
 
+resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h, num(ratio)), x, ratio )
 
 
 
@@ -151,3 +152,51 @@ end
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
+function decimate{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, M::Integer )
+    xLen   = length( x )    
+    hLen   = length( h )
+    bufLen = length( bufLen )
+    yLen   = int(xLen / M)    
+    
+    xLen   % M == 0     || error( "signal length % decimation must be 0" )
+    bufLen * M >= xLen  || error( "buffer lenght must be >= signal length * decimation" )
+    b
+    
+    y    = Array( T, yLen ) # yLen = xLen * Nφ
+
+    criticalYidx = int(ceil(hLen / M))
+        
+    xIdx = 1
+    
+    for yIdx = 1:criticalYidx
+            
+        acc  = zero(T)
+        
+        kMax = xIdx < hLen ? xIdx : hLen
+                
+        for k = 1:kMax
+            @inbounds acc += h[ k ] * x[ xIdx+1-k ]
+        end
+        
+        @inbounds y[yIdx] = acc
+        xIdx += M
+    end
+    
+    h = flipud(h)
+    
+    xIdx -= hLen
+    
+    for yIdx = criticalYidx+1:yLen
+            
+        acc  = zero(T)
+                
+        for k = 1:hLen
+            @inbounds acc += h[ k ] * x[ xIdx+k ]
+        end
+        
+        @inbounds y[yIdx] = acc
+        xIdx += M
+    end
+        
+    return y
+end
