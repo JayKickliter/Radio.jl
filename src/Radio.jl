@@ -30,6 +30,9 @@ export
     kaiser,
     rectangle,
     kaiserord,
+    filt,
+    decimate,
+    resample,
     interpolate,
     upsample,
     
