@@ -91,7 +91,7 @@ function interpolate{T}( PFB::Array{T, 2}, x::Vector{T} )
     return y
 end
 
-interpolate( h, x, interpolation ) = polyinterpolate( polyize( h, interpolation ), x )
+interpolate( h, x, interpolation ) = interpolate( polyize( h, interpolation ), x )
 
 
 
