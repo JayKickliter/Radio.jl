@@ -58,12 +58,12 @@ end
 #==============================================================================#
 
 function interpolate{T}( PFB::Array{T, 2}, x::Vector{T} )
-    (Ntaps, Nφ) = size( PFB )           # each column is a phase of the PFB, the rows hold the individual taps
-    Nx          = length( x )           # number of input items
-    Ny          = Nx * Nφ
-    y           = similar( x, Nx * Nφ ) # Ny = Nx * Nφ
+    (hLen, Nφ) = size( PFB )           # each column is a phase of the PFB, the rows hold the individual taps
+    xLen          = length( x )           # number of input items
+    yLen          = xLen * Nφ
+    y           = similar( x, xLen * Nφ ) # yLen = xLen * Nφ
     
-    for Xn = 1:Ntaps-1, φ = 1:Nφ        # until Xn == Ntaps, x[Xn-m+1] would reach out of bounds 
+    for Xn = 1:hLen-1, φ = 1:Nφ        # until Xn == hLen, x[Xn-m+1] would reach out of bounds 
                                         # this first loop limits Xn-m+1 to a minimum of 1
         Yn          = Nφ*(Xn-1)+φ
         accumulator = zero(T)
@@ -75,13 +75,13 @@ function interpolate{T}( PFB::Array{T, 2}, x::Vector{T} )
     
     PFB = flipud(PFB)
     
-    for Xn = Ntaps:Nx, φ = 1:Nφ         # no longer in danger of stepping out of bounds
+    for Xn = hLen:xLen, φ = 1:Nφ         # no longer in danger of stepping out of bounds
         
-        XnBase      = Xn-Ntaps               
+        XnBase      = Xn-hLen               
         Yn          = Nφ*(Xn-1)+φ
         accumulator = zero(T)        
                 
-        @simd for Tn = 1:Ntaps
+        @simd for Tn = 1:hLen
             @inbounds accumulator += PFB[Tn, φ] * x[XnBase + Tn]
         end
         
@@ -93,6 +93,21 @@ end
 
 interpolate( h, x, interpolation ) = interpolate( polyize( h, interpolation ), x )
 
+#=
+# Short interpolate test
+factor = 4;
+h      = rand( 56 );
+x      = rand( 1000 );
+xx     = zeros( length(x) * factor );
+for n = 0:length(x)-1;
+    xx[ n*factor+1 ] = x[ n+1 ];
+end
+
+nativeResult = interpolate( h, x, factor );
+baseResult   = Base.filt( h, 1.0, xx );
+[ baseResult nativeResult ]
+areApprox( nativeResult, baseResult )
+=#
 
 
 
@@ -104,21 +119,21 @@ interpolate( h, x, interpolation ) = interpolate( polyize( h, interpolation ), x
 
 function resample{T}( PFB::Array{T, 2}, x::Vector{T}, ratio::Rational )
     
-    (Ntaps, Nφ) = size( PFB ) # each column is a phase of the PFB, the rows hold the individual taps
-    L    = num(ratio)
-    M    = den( ratio )    
-    xLen = length( x )        # number of input items    
+    (hLen, Nφ)    = size( PFB ) # each column is a phase of the PFB, the rows hold the individual taps
+    interpolation = num(ratio)
+    decimation    = den( ratio )    
+    xLen          = length( x )        # number of input items    
     
-    xLen * L % M == 0 || error("signal length * interpolation mod decimation must be 0")    
+    xLen * interpolation % decimation == 0 || error("signal length * interpolation mod decimation must be 0")    
     
-    yLen = int(xLen*L/M)
+    yLen = int(xLen*interpolation/decimation)
     y    = zeros( T, yLen )
         
     for m = 0:yLen-1
         
-        φ    = mod( m*M, L)
-        nm   = int( floor( m*M / L ))
-        kMax = nm < Ntaps ? nm+1 : Ntaps
+        φ    = mod( m*decimation, interpolation)
+        nm   = int( floor( m*decimation / interpolation ))
+        kMax = nm < hLen ? nm+1 : hLen
         acc  = zero(T)
 
         # @printf( "\n\nφ = %d", φ+1 )
@@ -144,6 +159,28 @@ end
 
 resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h, num(ratio)), x, ratio )
 
+#=
+# Short rational resample test
+upfactor   = 3;
+downfactor = 4;
+h          = rand( 56 );
+x          = rand( 1000 );
+xx         = zeros( length(x) * upfactor );
+baseResult = similar( x, int( length(x) * upfactor / downfactor ))
+
+for n = 0:length(x)-1;
+    xx[ n*upfactor+1 ] = x[ n+1 ];
+end
+
+nativeResult           = resample( h, x, upfactor//downfactor );
+baseResultInterpolated = Base.filt( h, 1.0, xx );
+baseResult = [ baseResultInterpolated[n] for n = 1:downfactor:length( baseResultInterpolated ) ]
+
+[ baseResult nativeResult ]
+areApprox( nativeResult, baseResult )
+=#
+
+
 
 
 #==============================================================================#
@@ -152,14 +189,14 @@ resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, M::Integer )
-    (xLen   = length( x )) % M      == 0    || error( "signal length % decimation must be 0" )
-    (bufLen = length( buffer )) * M >= xLen || error( "buffer lenght must be >= signal length * decimation" )        
+function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation::Integer )
+    (xLen   = length( x )) % decimation      == 0    || error( "signal length % decimation must be 0" )
+    (bufLen = length( buffer )) * decimation >= xLen || error( "buffer lenght must be >= signal length * decimation" )        
     hLen    = length( h )
-    yLen    = int(xLen / M)    
+    yLen    = int(xLen / decimation)    
     
     
-    criticalYidx = int(ceil(hLen / M)) # The index of y where our taps would overlap
+    criticalYidx = int(ceil(hLen / decimation)) # The index of y where our taps would overlap
     xIdx = 1
     
     for yIdx = 1:criticalYidx
@@ -172,7 +209,7 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, M::Integer
         end
         
         @inbounds buffer[yIdx] = acc
-        xIdx += M
+        xIdx += decimation
     end
     
     h = flipud(h)
@@ -188,10 +225,21 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, M::Integer
         end
         
         @inbounds buffer[yIdx] = acc
-        xIdx += M
+        xIdx += decimation
     end
         
     return buffer
 end
 
-decimate{T}( h::Vector{T}, x::Vector{T}, M::Integer ) = decimate!( similar(x, int(length(x)/M)), h::Vector{T}, x::Vector{T}, M::Integer )
+decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer ) = decimate!( similar(x, int(length(x)/decimation)), h::Vector{T}, x::Vector{T}, decimation::Integer )
+
+#=
+# Short decimation test
+h            = rand( 56 )
+x            = rand( 1000 )
+factor       = 10
+nativeResult = decimate( h, x, factor )
+baseResult   = Base.filt( h, 1.0, x )
+baseResult   = baseResult[1:factor:end]
+areApprox( nativeResult, baseResult )
+=#
