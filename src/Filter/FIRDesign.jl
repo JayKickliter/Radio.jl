@@ -11,14 +11,30 @@ type FIRKernelSingleRate <: FIRKernel
     taps::Vector
 end
 
-# Multirate FIR kernels, holds a polyphase filter bank
-type FIRKernelInterpolator <: FIRKernel
+# Interpolator FIR kernel
+type FIRKernel⬆︎ <: FIRKernel
     PFB::Matrix
     interploation::Int
+    leftovers::Vector
 end
 
-type FIRFilter <: Filter
-    kernel::FIRKernel
+# Decimator FIR kernel
+type FIRKernel⬇︎ <: FIRKernel
+    taps::Vector
+    decimation::Int
+    xLeftover::Vector
+end
+
+# Rational resampler FIR kernel
+type FIRKernel⬆︎⬇︎  <: FIRKernel
+    PFB::Matrix
+    interploation::Int
+    decimation::Int
+    xLeftover::Vector
+end
+
+type FIRFilter{Tk<:FIRKernel} <: Filter
+    kernel::Tk
     state::Vector
 end
 
@@ -32,15 +48,31 @@ end
 
 FIRFilter{Tt}( taps::Vector{Tt} ) = FIRFilter( Tt, taps )
 
-function FIRFilter{Tx}( ::Type{Tx}, taps::Vector, interploation::Integer )
-    PFB    = polyize( taps, interploation )
-    Ns     = size( PFB )[1]
-    state  = zeros( Tx, Ns )
-    kernel = FIRKernelInterpolator( PFB, interploation )
+function FIRFilter{Tx}( ::Type{Tx}, taps::Vector, resampleRatio::Rational )
+    
+    interploation = num( resampleRatio )
+    decimation    = den( resampleRatio )
+    
+    if resampleRatio == 1
+        return FIRFilter( Tx, taps )        
+    elseif interploation == 1
+        PFB    = taps
+        kernel = FIRKernel⬇︎( PFB, decimation, Tx[] )
+    elseif decimation == 1
+        PFB    = polyize( taps, interploation )
+        kernel = FIRKernel⬆︎( PFB, interploation, Tx[] )
+    else
+        PFB    = polyize( taps, interploation )
+        kernel = FIRKernel⬆︎⬇︎( PFB, interploation, decimation, Tx[] )
+    end 
+    
+    hLen  = size(PFB)[1]
+    state = zeros( Tx, hLen - 1 )         
+        
     FIRFilter( kernel, state )
 end
 
-FIRFilter{Tt}( taps::Vector{Tt}, interploation::Integer ) = FIRFilter( Tt, taps, interploation )
+FIRFilter{Tt}( taps::Vector{Tt}, resampleRatio::Rational ) = FIRFilter( Tt, taps, resampleRatio )
 
 #==============================================================================#
 #                               Constants/Enums                                #

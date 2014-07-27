@@ -59,8 +59,8 @@ end
 
 function interpolate{T}( PFB::Array{T, 2}, x::Vector{T} )
     (hLen, Nφ) = size( PFB )           # each column is a phase of the PFB, the rows hold the individual taps
-    xLen          = length( x )           # number of input items
-    yLen          = xLen * Nφ
+    xLen        = length( x )           # number of input items
+    yLen        = xLen * Nφ
     y           = similar( x, xLen * Nφ ) # yLen = xLen * Nφ
     
     for Xn = 1:hLen-1, φ = 1:Nφ        # until Xn == hLen, x[Xn-m+1] would reach out of bounds 
@@ -92,6 +92,10 @@ function interpolate{T}( PFB::Array{T, 2}, x::Vector{T} )
 end
 
 interpolate( h, x, interpolation ) = interpolate( polyize( h, interpolation ), x )
+
+function filt( self::FIRFilter{FIRKernel⬆︎}, x )
+   interpolate( self.kernel.PFB, x ) 
+end
 
 #=
 # Short interpolate test
