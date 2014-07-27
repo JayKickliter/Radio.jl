@@ -199,7 +199,7 @@ function resample{T}( PFB::Array{T, 2}, x::Vector{T}, ratio::Rational )
     
     (hLen, Nφ)    = size( PFB ) # each column is a phase of the PFB, the rows hold the individual taps
     interpolation = num(ratio)
-    decimation    = den( ratio )    
+    decimation    = den( ratio )
     xLen          = length( x )        # number of input items    
     
     xLen * interpolation % decimation == 0 || error("signal length * interpolation mod decimation must be 0")    
@@ -212,22 +212,12 @@ function resample{T}( PFB::Array{T, 2}, x::Vector{T}, ratio::Rational )
         φ    = mod( m*decimation, interpolation)
         nm   = int( floor( m*decimation / interpolation ))
         kMax = nm < hLen ? nm+1 : hLen
-        acc  = zero(T)
-
-        # @printf( "\n\nφ = %d", φ+1 )
-        # @printf( "\tnm = %d", nm+1 )
-        # @printf( "\tkMax = %d\n", kMax)
-        # @printf( "y[%d] =", m+1 )
-        
+        acc  = zero(T)        
         
         for k = 0:kMax-1
-            # @printf( "\tPFB[%d, %d] * x[%d]", k+1, φ+1, nm+1-k )
-            # @printf( "\t%f * %f", PFB[k+1, φ+1], x[nm+1-k] )
             acc += PFB[ k+1, φ+1 ] * x[ nm+1-k ]
         end
-        
-        # @printf( "\ny[%d] = %f", m+1, acc )
-        
+                
         y[m+1] = acc
     
     end
