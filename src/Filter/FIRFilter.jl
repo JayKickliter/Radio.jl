@@ -5,26 +5,26 @@ abstract Filter
 abstract FIRKernel
 
 # Single rate FIR kernel, just hold filter taps
-type FIRKernelSingleRate <: FIRKernel
+type FIRStandard <: FIRKernel
     taps::Vector
 end
 
 # Interpolator FIR kernel
-type FIRKernel⬆︎ <: FIRKernel
+type FIRInterpolator <: FIRKernel
     PFB::Matrix
     interploation::Int
     leftovers::Vector
 end
 
 # Decimator FIR kernel
-type FIRKernel⬇︎ <: FIRKernel
+type FIRDecimator <: FIRKernel
     taps::Vector
     decimation::Int
     xLeftover::Vector
 end
 
 # Rational resampler FIR kernel
-type FIRKernel⬆︎⬇︎  <: FIRKernel
+type FIRRational  <: FIRKernel
     PFB::Matrix
     interploation::Int
     decimation::Int
@@ -40,7 +40,7 @@ end
 function FIRFilter{Tx}( ::Type{Tx}, taps::Vector )
     Nt     = length( taps )
     state  = zeros( Tx, Nt-1 )
-    kernel = FIRKernelSingleRate( taps )
+    kernel = FIRStandard( taps )
     FIRFilter( kernel, state )
 end
 
@@ -55,13 +55,13 @@ function FIRFilter{Tx}( ::Type{Tx}, taps::Vector, resampleRatio::Rational )
         return FIRFilter( Tx, taps )        
     elseif interploation == 1
         PFB    = taps
-        kernel = FIRKernel⬇︎( PFB, decimation, Tx[] )
+        kernel = FIRDecimator( PFB, decimation, Tx[] )
     elseif decimation == 1
         PFB    = polyize( taps, interploation )
-        kernel = FIRKernel⬆︎( PFB, interploation, Tx[] )
+        kernel = FIRInterpolator( PFB, interploation, Tx[] )
     else
         PFB    = polyize( taps, interploation )
-        kernel = FIRKernel⬆︎⬇︎( PFB, interploation, decimation, Tx[] )
+        kernel = FIRRational( PFB, interploation, decimation, Tx[] )
     end 
     
     hLen  = size(PFB)[1]
@@ -167,7 +167,7 @@ end
 
 interpolate( h, x, interpolation ) = interpolate( polyize( h, interpolation ), x )
 
-function filt( self::FIRFilter{FIRKernel⬆︎}, x )
+function filt( self::FIRFilter{FIRInterpolator}, x )
    interpolate( self.kernel.PFB, x ) 
 end
 
