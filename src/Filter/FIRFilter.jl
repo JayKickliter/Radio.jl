@@ -78,25 +78,37 @@ FIRFilter{Tt}( taps::Vector{Tt}, resampleRatio::Rational ) = FIRFilter( Tt, taps
 #               ___] | | \| |__] |___ |___    |  \ |  |  |  |___               #
 #==============================================================================#
 
-function filt{T}( taps::Vector{T}, signal::Vector{T} )
-    @assert length(signal) > length(taps)
-    signal_len     = length( signal )
-    taps_len       = length( taps )
-    output_buffer  = zeros( T, signal_len )
-    for n = 1:taps_len-1
+function filt{T}( h::Vector{T}, x::Vector{T} )
+    xLen = length( x )
+    hLen = length( h )
+    @assert length(x) > length(h)
+
+    buffer  = zeros( T, xLen )
+
+    for n = 1:hLen-1
         for m = 1:n
-            @inbounds output_buffer[n] += taps[m] * signal[n-m+1]
+            @inbounds buffer[n] += h[m] * x[n-m+1]
         end
     end
-    for n = taps_len:signal_len
-        @simd for m = 1:taps_len
-            @inbounds output_buffer[n] += taps[m] * signal[n-m+1]
+    for n = hLen:xLen
+        @simd for m = 1:hLen
+            @inbounds buffer[n] += h[m] * x[n-m+1]
         end
     end
-    output_buffer
+    buffer
 end
 
+#=
+# Short single-rate test
+h          = rand( 56 );
+x          = rand( 1000 );
 
+nativeResult = filt( h, x );
+baseResult   = Base.filt( h, 1.0, x );
+
+[ baseResult nativeResult ]
+areApprox( nativeResult, baseResult )
+=#
 
 
 #==============================================================================#
@@ -131,41 +143,46 @@ end
 #               | | \|  |  |___ |  \ |    |___ |__| |  |  |  |___              #
 #==============================================================================#
 
-function interpolate{T}( PFB::Array{T, 2}, x::Vector{T} )
-    (hLen, Nφ) = size( PFB )           # each column is a phase of the PFB, the rows hold the individual taps
-    xLen        = length( x )           # number of input items
-    yLen        = xLen * Nφ
-    y           = similar( x, xLen * Nφ ) # yLen = xLen * Nφ
+function interpolate!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T} )
+    (hLen, Nφ)  = size( PFB )      # each column is a phase of the PFB, the rows hold the individual taps
+    xLen        = length( x )      # number of input items
+    bufLen      = length( buffer )
     
-    for Xn = 1:hLen-1, φ = 1:Nφ        # until Xn == hLen, x[Xn-m+1] would reach out of bounds 
-                                        # this first loop limits Xn-m+1 to a minimum of 1
-        Yn          = Nφ*(Xn-1)+φ
+    bufLen >= xLen*Nφ || error( "buffer length must be >= signal length")
+    
+    yIdx = 1
+    
+    for xIdx = 1:hLen-1, φ = 1:Nφ  # until xIdx == hLen, x[xIdx-m+1] would reach out of bounds 
+                                   # this first loop limits xIdx-m+1 to a minimum of 1
         accumulator = zero(T)
-        for Tn = 1:Xn                   # for each tap in phase[n]
-            @inbounds accumulator += PFB[Tn, φ] * x[Xn-Tn+1]
+        for Tn = 1:xIdx            # for each tap in phase[n]
+            @inbounds accumulator += PFB[Tn, φ] * x[xIdx-Tn+1]
         end
-        y[Yn] = accumulator
+        buffer[yIdx] = accumulator
+        yIdx += 1
     end
     
     PFB = flipud(PFB)
     
-    for Xn = hLen:xLen, φ = 1:Nφ         # no longer in danger of stepping out of bounds
+    for xIdx = hLen:xLen, φ = 1:Nφ # no longer in danger of stepping out of bounds
         
-        XnBase      = Xn-hLen               
-        Yn          = Nφ*(Xn-1)+φ
+        xStartIdx      = xIdx-hLen               
+        yIdx          = Nφ*(xIdx-1)+φ
         accumulator = zero(T)        
                 
         @simd for Tn = 1:hLen
-            @inbounds accumulator += PFB[Tn, φ] * x[XnBase + Tn]
+            @inbounds accumulator += PFB[Tn, φ] * x[xStartIdx + Tn]
         end
         
-        y[Yn] = accumulator
+        buffer[yIdx] = accumulator
+        yIdx += 1
     end
 
-    return y
+    return buffer
 end
 
-interpolate( h, x, interpolation ) = interpolate( polyize( h, interpolation ), x )
+interpolate{T}( PFB::Array{T, 2}, x::Vector{T} ) = interpolate!( similar( x, length(x)*size(PFB)[2] ), PFB, x )
+interpolate( h, x, interpolation )               = interpolate( polyize( h, interpolation ), x )
 
 function filt( self::FIRFilter{FIRInterpolator}, x )
    interpolate( self.kernel.PFB, x ) 
@@ -195,34 +212,39 @@ areApprox( nativeResult, baseResult )
 #           |  \ |  |  |  .   |  \ |___ ___] |  | |  | |    |___ |___          #
 #==============================================================================#
 
-function resample{T}( PFB::Array{T, 2}, x::Vector{T}, ratio::Rational )
-    
+function resample!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T}, ratio::Rational )   
     (hLen, Nφ)    = size( PFB ) # each column is a phase of the PFB, the rows hold the individual taps
     interpolation = num(ratio)
     decimation    = den( ratio )
-    xLen          = length( x )        # number of input items    
+    xLen          = length( x ) # number of input items    
+    bufLen        = length( buffer )
+
     
     xLen * interpolation % decimation == 0 || error("signal length * interpolation mod decimation must be 0")    
-    
-    yLen = int(xLen*interpolation/decimation)
-    y    = zeros( T, yLen )
         
-    for m = 0:yLen-1
+    for m = 0:bufLen-1
         
         φ    = mod( m*decimation, interpolation)
         nm   = int( floor( m*decimation / interpolation ))
         kMax = nm < hLen ? nm+1 : hLen
-        acc  = zero(T)        
+        accumulator  = zero(T)        
         
         for k = 0:kMax-1
-            acc += PFB[ k+1, φ+1 ] * x[ nm+1-k ]
+            accumulator += PFB[ k+1, φ+1 ] * x[ nm+1-k ]
         end
                 
-        y[m+1] = acc
+        buffer[m+1] = accumulator
     
     end
 
-    return y
+    return buffer
+end
+
+function resample{T}( PFB::Array{T, 2}, x::Vector{T}, ratio::Rational )
+    xLen   = length( x )    
+    bufLen = int( floor( xLen * ratio ))
+    buffer = Array( T, bufLen )
+    resample!( buffer, PFB, x, ratio )
 end
 
 resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h, num(ratio)), x, ratio )
@@ -257,26 +279,26 @@ areApprox( nativeResult, baseResult )
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation::Integer )
-    (xLen   = length( x )) % decimation      == 0    || error( "signal length % decimation must be 0" )
-    (bufLen = length( buffer )) * decimation >= xLen || error( "buffer lenght must be >= signal length * decimation" )        
-    hLen    = length( h )
-    yLen    = int(xLen / decimation)    
-    
+function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation::Integer, state::Vector{T} = T[] )
+    xLen   = length( x )
+    hLen   = length( h )
+    outLen = floor(int(xLen / decimation))
+
+    length( buffer ) * decimation >= xLen || error( "buffer lenght must be >= signal length * decimation" )        
     
     criticalYidx = int(ceil(hLen / decimation)) # The index of y where our taps would overlap
-    xIdx = 1
-    
+    xIdx         = 1    
+
     for yIdx = 1:criticalYidx
             
-        acc  = zero(T)
+        accumulator  = zero(T)
         kMax = xIdx < hLen ? xIdx : hLen
                 
         for k = 1:kMax
-            @inbounds acc += h[ k ] * x[ xIdx+1-k ]
+            @inbounds accumulator += h[ k ] * x[ xIdx+1-k ]
         end
         
-        @inbounds buffer[yIdx] = acc
+        @inbounds buffer[yIdx] = accumulator
         xIdx += decimation
     end
     
@@ -284,22 +306,22 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
     
     xIdx -= hLen
     
-    for yIdx = criticalYidx+1:yLen
+    for yIdx = criticalYidx+1:outLen
             
-        acc  = zero(T)
+        accumulator  = zero(T)
                 
         for k = 1:hLen
-            @inbounds acc += h[ k ] * x[ xIdx+k ]
+            @inbounds accumulator += h[ k ] * x[ xIdx+k ]
         end
         
-        @inbounds buffer[yIdx] = acc
+        @inbounds buffer[yIdx] = accumulator
         xIdx += decimation
     end
         
     return buffer
 end
 
-decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer ) = decimate!( similar(x, int(length(x)/decimation)), h::Vector{T}, x::Vector{T}, decimation::Integer )
+decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer ) = decimate!( similar(x, int(floor(length(x)/decimation))), h, x, decimation )
 
 #=
 # Short decimation test
