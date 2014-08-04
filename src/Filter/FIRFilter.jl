@@ -117,7 +117,7 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
 
     bufLen >= xLen || error( "buffer length must be >= x length")
 
-    if stateLen != reqStateLen
+    if stateLen != reqStateLen          # TODO: write the filtering logic to not depends on state being a certain length, as the current implementation allocates useless zeros
         if stateLen == 0
             state = zeros( T, reqStateLen )
         elseif stateLen < reqStateLen
@@ -135,17 +135,17 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
         hIdx        = 1
 
         for stateIdx in bufIdx:stateLen # this loop takes care of previous state
-            accumulator += h[hIdx] * state[stateIdx]
+            @inbounds accumulator += h[hIdx] * state[stateIdx]
             hIdx += 1
         end
 
         hIdx = hLen-bufIdx+1
         for xIdx in 1:bufIdx            # this loop takes care of the first hlen-1 samples in x
-            accumulator += h[hIdx] * x[xIdx]
+            @inbounds accumulator += h[hIdx] * x[xIdx]
             hIdx += 1
         end
 
-        buffer[bufIdx] = accumulator
+        @inbounds buffer[bufIdx] = accumulator
     end
 
     for bufIdx in hLen:xLen             # filter ramp is complete, normal filtering from this point on
@@ -153,12 +153,12 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
         accumulator = zero(T)
         xIdx        = bufIdx-hLen+1
 
-        for hIdx in 1:hLen
-            accumulator += h[hIdx] * x[xIdx]
+        @simd for hIdx in 1:hLen
+            @inbounds accumulator += h[hIdx] * x[xIdx]
             xIdx += 1
         end
 
-        buffer[bufIdx] = accumulator
+        @inbounds buffer[bufIdx] = accumulator
     end
 
     buffer
@@ -179,15 +179,14 @@ end
 
 #= Short single-rate test
 h          = rand( 56 );
-x          = rand( 1000 );
+x          = rand( 100_000 );
 
-nativeResult = filt( h, x );
-baseResult   = Base.filt( h, 1.0, x );
+@time nativeResult = filt( h, x );
+@time baseResult   = Base.filt( h, 1.0, x );
 
 self = FIRFilter( h )
 
-y = filt( self, x[1:250] )
-y = [ y, filt( self, x[251:end] ) ]
+@time y = [ filt( self, x[1:250] ) , filt( self, x[251:end] ) ]
 
 [ baseResult nativeResult y  ]
 areApprox( nativeResult, baseResult )
