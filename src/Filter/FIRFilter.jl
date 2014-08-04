@@ -4,21 +4,21 @@
 abstract Filter
 abstract FIRKernel
 
-# Single rate FIR kernel, just hold filter taps
+# Single rate FIR kernel, just hold filter h
 type FIRStandard <: FIRKernel
-    taps::Vector
+    h::Vector
 end
 
 # Interpolator FIR kernel
 type FIRInterpolator <: FIRKernel
     PFB::Matrix
     interploation::Int
-    leftovers::Vector
+    xLeftover::Vector
 end
 
 # Decimator FIR kernel
 type FIRDecimator <: FIRKernel
-    taps::Vector
+    h::Vector
     decimation::Int
     xLeftover::Vector
 end
@@ -37,30 +37,30 @@ type FIRFilter{Tk<:FIRKernel} <: Filter
 end
 
 
-function FIRFilter{Tx}( ::Type{Tx}, taps::Vector )
-    Nt     = length( taps )
-    state  = zeros( Tx, Nt-1 )
-    kernel = FIRStandard( taps )
+function FIRFilter{Tx}( ::Type{Tx}, h::Vector )
+    hLen     = length( h )
+    state  = zeros( Tx, hLen-1 )
+    kernel = FIRStandard( h )
     FIRFilter( kernel, state )
 end
 
-FIRFilter{Tt}( taps::Vector{Tt} ) = FIRFilter( Tt, taps )
+FIRFilter{Tt}( h::Vector{Tt} ) = FIRFilter( Tt, h )
 
-function FIRFilter{Tx}( ::Type{Tx}, taps::Vector, resampleRatio::Rational )
+function FIRFilter{Tx}( ::Type{Tx}, h::Vector, resampleRatio::Rational )
 
     interploation = num( resampleRatio )
     decimation    = den( resampleRatio )
 
     if resampleRatio == 1
-        return FIRFilter( Tx, taps )
+        return FIRFilter( Tx, h )
     elseif interploation == 1
-        PFB    = taps
+        PFB    = h
         kernel = FIRDecimator( PFB, decimation, Tx[] )
     elseif decimation == 1
-        PFB    = polyize( taps, interploation )
+        PFB    = polyize( h, interploation )
         kernel = FIRInterpolator( PFB, interploation, Tx[] )
     else
-        PFB    = polyize( taps, interploation )
+        PFB    = polyize( h, interploation )
         kernel = FIRRational( PFB, interploation, decimation, Tx[] )
     end
 
@@ -70,7 +70,7 @@ function FIRFilter{Tx}( ::Type{Tx}, taps::Vector, resampleRatio::Rational )
     FIRFilter( kernel, state )
 end
 
-FIRFilter{Tt}( taps::Vector{Tt}, resampleRatio::Rational ) = FIRFilter( Tt, taps, resampleRatio )
+FIRFilter{Tt}( h::Vector{Tt}, resampleRatio::Rational ) = FIRFilter( Tt, h, resampleRatio )
 
 
 
@@ -82,9 +82,9 @@ FIRFilter{Tt}( taps::Vector{Tt}, resampleRatio::Rational ) = FIRFilter( Tt, taps
 #==============================================================================#
 
 function polyize{T}( h::Vector{T}, interpolation )
-    hLen         = length( h )
-    tapsPerPhase = int( ceil( hLen/interpolation ))
-    pfbSize = tapsPerPhase * interpolation
+    hLen      = length( h )
+    hLenPerφ  = int( ceil( hLen/interpolation ))
+    pfbSize   = hLenPerφ * interpolation
     # check that the vector is an integer multiple of interpolation
     if hLen != pfbSize
         hExtended             = similar( h, pfbSize )
@@ -92,10 +92,10 @@ function polyize{T}( h::Vector{T}, interpolation )
         hExtended[hLen+1:end] = 0
         h                     = hExtended
     end
-    nFilters     = interpolation
-    hLen         = length( h )
-    tapsPerPhase = int( hLen/nFilters )
-    pfb          = reshape( h, nFilters, tapsPerPhase )'
+    nFilters  = interpolation
+    hLen      = length( h )
+    hLenPerφ  = int( hLen/nFilters )
+    pfb       = reshape( h, nFilters, hLenPerφ )'
 end
 
 
@@ -127,7 +127,7 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
         end
     end
 
-    h = flipud( h )                     # flip the taps to make the multiplication more SIMD friendly
+    h = flipud( h )                     # flip the h to make the multiplication more SIMD friendly
 
     for bufIdx in 1:hLen-1              # this first loop takes care of filter ramp up and previous state
 
@@ -161,34 +161,34 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
         @inbounds buffer[bufIdx] = accumulator
     end
 
-    buffer
+    return buffer
 end
 
 
 filt{T}( h::Vector{T}, x::Vector{T}, state::Vector{T} = T[] ) = filt!( similar(x), h, x, state )
 
 function filt( self::FIRFilter{FIRStandard}, x )
-    taps       = self.kernel.taps
-    hLen       = length( taps )
+    h       = self.kernel.h
+    hLen       = length( h )
     nextState  = x[end-hLen+2:end]
-    y          = filt( self.kernel.taps, x, self.state )
+    y          = filt( self.kernel.h, x, self.state )
     self.state = nextState
 
     return y
 end
 
 #= Short single-rate test
-h          = rand( 56 );
-x          = rand( 100_000 );
+h = rand( 56 );
+x = rand( 100_000 );
 
 @time nativeResult = filt( h, x );
 @time baseResult   = Base.filt( h, 1.0, x );
 
-self = FIRFilter( h )
+self = FIRFilter( h );
 
-@time y = [ filt( self, x[1:250] ) , filt( self, x[251:end] ) ]
+@time y = [ filt( self, x[1:250] ) , filt( self, x[251:end] ) ];
 
-[ baseResult nativeResult y  ]
+# [ baseResult nativeResult y  ]
 areApprox( nativeResult, baseResult )
 areApprox( y, baseResult )
 =#
@@ -203,7 +203,7 @@ areApprox( y, baseResult )
 #==============================================================================#
 
 function interpolate!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T} )
-    (hLen, Nφ)  = size( PFB )      # each column is a phase of the PFB, the rows hold the individual taps
+    (hLen, Nφ)  = size( PFB )      # each column is a phase of the PFB, the rows hold the individual h
     xLen        = length( x )      # number of input items
     bufLen      = length( buffer )
 
@@ -248,7 +248,7 @@ function filt( self::FIRFilter{FIRInterpolator}, x )
 end
 
 #= Short interpolate test
-factor = 4;
+factor = 32;
 h      = rand( 56 );
 x      = rand( 1000 );
 xx     = zeros( length(x) * factor );
@@ -272,12 +272,11 @@ areApprox( nativeResult, baseResult )
 #==============================================================================#
 
 function resample!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T}, ratio::Rational )
-    (hLen, Nφ)    = size( PFB ) # each column is a phase of the PFB, the rows hold the individual taps
+    (hLen, Nφ)    = size( PFB ) # each column is a phase of the PFB, the rows hold the individual h
     interpolation = num(ratio)
     decimation    = den( ratio )
     xLen          = length( x ) # number of input items
     bufLen        = length( buffer )
-
 
     xLen * interpolation % decimation == 0 || error("signal length * interpolation mod decimation must be 0")
 
@@ -344,7 +343,7 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
 
     length( buffer ) * decimation >= xLen || error( "buffer lenght must be >= signal length * decimation" )
 
-    criticalYidx = int(ceil(hLen / decimation)) # The index of y where our taps would overlap
+    criticalYidx = int(ceil(hLen / decimation)) # The index of y where our h would overlap
     xIdx         = 1
 
     for yIdx = 1:criticalYidx
@@ -382,11 +381,14 @@ end
 decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer ) = decimate!( similar(x, int(floor(length(x)/decimation))), h, x, decimation )
 
 #= Short decimation test
-h            = rand( 56 )
-x            = rand( 1000 )
-factor       = 10
-nativeResult = decimate( h, x, factor )
-baseResult   = Base.filt( h, 1.0, x )
-baseResult   = baseResult[1:factor:end]
+h            = rand( 56 );
+x            = rand( 1000 );
+factor       = 10;
+@time nativeResult = decimate( h, x, factor );
+
+@time begin
+    baseResult   = Base.filt( h, 1.0, x );
+    baseResult   = baseResult[1:factor:end];
+end
 areApprox( nativeResult, baseResult )
 =#
