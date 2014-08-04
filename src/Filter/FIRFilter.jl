@@ -134,13 +134,13 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
         accumulator = zero(T)
         hIdx        = 1
 
-        for stateIdx in bufIdx:stateLen
+        for stateIdx in bufIdx:stateLen # this loop takes care of previous state
             accumulator += h[hIdx] * state[stateIdx]
             hIdx += 1
         end
 
         hIdx = hLen-bufIdx+1
-        for xIdx in 1:bufIdx
+        for xIdx in 1:bufIdx # this loop takes care of the first hlen-1 samples in x
             accumulator += h[hIdx] * x[xIdx]
             hIdx += 1
         end
