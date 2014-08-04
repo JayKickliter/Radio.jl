@@ -127,9 +127,9 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
         end
     end
 
-    h = flipud( h )         # flip the taps to make the multiplication more SIMD friendly
+    h = flipud( h )                     # flip the taps to make the multiplication more SIMD friendly
 
-    for bufIdx in 1:hLen-1  # this first loop takes care of filter ramp up and previous state
+    for bufIdx in 1:hLen-1              # this first loop takes care of filter ramp up and previous state
 
         accumulator = zero(T)
         hIdx        = 1
@@ -140,7 +140,7 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
         end
 
         hIdx = hLen-bufIdx+1
-        for xIdx in 1:bufIdx # this loop takes care of the first hlen-1 samples in x
+        for xIdx in 1:bufIdx            # this loop takes care of the first hlen-1 samples in x
             accumulator += h[hIdx] * x[xIdx]
             hIdx += 1
         end
@@ -148,7 +148,7 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
         buffer[bufIdx] = accumulator
     end
 
-    for bufIdx in hLen:xLen # filter ramp is complete, normal filtering from this point on
+    for bufIdx in hLen:xLen             # filter ramp is complete, normal filtering from this point on
 
         accumulator = zero(T)
         xIdx        = bufIdx-hLen+1
@@ -163,6 +163,7 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
 
     buffer
 end
+
 
 filt{T}( h::Vector{T}, x::Vector{T}, state::Vector{T} = T[] ) = filt!( similar(x), h, x, state )
 
