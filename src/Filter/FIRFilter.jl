@@ -177,21 +177,29 @@ function filt( self::FIRFilter{FIRStandard}, x )
     return y
 end
 
-#= Short single-rate test
-h = rand( 56 );
-x = rand( 100_000 );
 
-@time nativeResult = filt( h, x );
-@time baseResult   = Base.filt( h, 1.0, x );
+function short_singlerate_test( h, x, state )
+    @printf( "Radio's Single-rate filt\n\t")
+    @time nativeResult = filt( h, x, state )
+    @printf( "Base Single-rate filt\n\t")
+    @time baseResult   = Base.filt( h, 1.0, x )
 
-self = FIRFilter( h );
+    self = FIRFilter( h )
+    
+    @printf( "Stateful Single-rate filt\n\t")
+    @time y = [ filt( self, x[1:250] ) , filt( self, x[251:end] ) ]
 
-@time y = [ filt( self, x[1:250] ) , filt( self, x[251:end] ) ];
+    # [ baseResult nativeResult y  ]
+    areApprox( nativeResult, baseResult ) && areApprox( y, baseResult )    
+end
 
-# [ baseResult nativeResult y  ]
-areApprox( nativeResult, baseResult )
-areApprox( y, baseResult )
-=#
+#=============================
+h = rand( 56 )
+x = rand( 1_000_000 )
+state = zeros( length(h) - 1 )
+
+short_singlerate_test( h, x )
+=============================#
 
 
 
@@ -247,20 +255,28 @@ function filt( self::FIRFilter{FIRInterpolator}, x )
    interpolate( self.kernel.PFB, x )
 end
 
-#= Short interpolate test
-factor = 32;
-h      = rand( 56 );
-x      = rand( 1000 );
-xx     = zeros( length(x) * factor );
-for n = 0:length(x)-1;
-    xx[ n*factor+1 ] = x[ n+1 ];
+function short_interpolate_test( h, x, factor )    
+    @printf( "Radio's interpolate\n\t")
+    @time nativeResult = interpolate( h, x, factor )
+    @printf( "Naive interpolate\n\t")
+    @time begin
+        xx = zeros( length(x) * factor )
+        for n = 0:length(x)-1;
+            xx[ n*factor+1 ] = x[ n+1 ]
+        end
+        baseResult = Base.filt( h, 1.0, xx )        
+    end
+        
+    areApprox( nativeResult, baseResult )
 end
 
-nativeResult = interpolate( h, x, factor );
-baseResult   = Base.filt( h, 1.0, xx );
-[ baseResult nativeResult ]
-areApprox( nativeResult, baseResult )
-=#
+#=============================
+h = rand( 56 )
+x = rand( 1_000_000 )
+factor = 4
+
+short_interpolate_test( h, x, factor )
+=============================#
 
 
 
@@ -307,25 +323,36 @@ end
 
 resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h, num(ratio)), x, ratio )
 
-#= Short rational resample test
-upfactor   = 3;
-downfactor = 4;
-h          = rand( 56 );
-x          = rand( 1000 );
-xx         = zeros( length(x) * upfactor );
-baseResult = similar( x, int( length(x) * upfactor / downfactor ))
-
-for n = 0:length(x)-1;
-    xx[ n*upfactor+1 ] = x[ n+1 ];
+function short_rational_test( h, x, ratio )
+    upfactor   = num( ratio )
+    downfactor = den( ratio )
+    
+    @printf( "Radio's rational resampling\n\t")
+    @time nativeResult = resample( h, x, upfactor//downfactor );
+    
+    @printf( "Naive resampling\n\t")
+    @time begin
+        xx         = zeros( length(x) * upfactor );
+        baseResult = similar( x, int( length(x) * upfactor / downfactor ))
+        
+        for n = 0:length(x)-1;
+            xx[ n*upfactor+1 ] = x[ n+1 ];
+        end
+        
+        baseResultInterpolated = Base.filt( h, 1.0, xx );
+        baseResult = [ baseResultInterpolated[n] for n = 1:downfactor:length( baseResultInterpolated ) ]
+    end
+    
+    [ baseResult nativeResult ]
+    areApprox( nativeResult, baseResult )
 end
 
-nativeResult           = resample( h, x, upfactor//downfactor );
-baseResultInterpolated = Base.filt( h, 1.0, xx );
-baseResult = [ baseResultInterpolated[n] for n = 1:downfactor:length( baseResultInterpolated ) ]
-
-[ baseResult nativeResult ]
-areApprox( nativeResult, baseResult )
-=#
+#=========================
+ratio = 3//4
+h     = rand( 56 )
+x     = rand( 1000000 )
+short_rational_test( h, x, ratio )
+=========================#
 
 
 
@@ -380,15 +407,21 @@ end
 
 decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer ) = decimate!( similar(x, int(floor(length(x)/decimation))), h, x, decimation )
 
-#= Short decimation test
-h            = rand( 56 );
-x            = rand( 1000 );
-factor       = 10;
-@time nativeResult = decimate( h, x, factor );
-
-@time begin
-    baseResult   = Base.filt( h, 1.0, x );
-    baseResult   = baseResult[1:factor:end];
+function short_decimate_test( h, x, factor )
+    @printf( "Radio's decimation\n\t")
+    @time nativeResult = decimate( h, x, factor );
+    
+    @printf( "Naive resampling\n\t")
+    @time begin
+        baseResult   = Base.filt( h, 1.0, x );
+        baseResult   = baseResult[1:factor:end];
+    end
+    areApprox( nativeResult, baseResult )
 end
-areApprox( nativeResult, baseResult )
-=#
+
+#===================================
+h      = rand( 128 );
+x      = rand( 10_000_000 );
+factor = 100
+short_decimate_test( h, x, factor )
+===================================#
