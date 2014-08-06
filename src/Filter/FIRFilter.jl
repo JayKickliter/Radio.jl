@@ -168,7 +168,7 @@ end
 filt{T}( h::Vector{T}, x::Vector{T}, state::Vector{T} = T[] ) = filt!( similar(x), h, x, state )
 
 function filt( self::FIRFilter{FIRStandard}, x )
-    h       = self.kernel.h
+    h          = self.kernel.h
     hLen       = length( h )
     nextState  = x[end-hLen+2:end]
     y          = filt( self.kernel.h, x, self.state )
@@ -364,29 +364,55 @@ short_rational_test( h, x, ratio )
 #==============================================================================#
 
 function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation::Integer, state::Vector{T} = T[] )
-    xLen   = length( x )
-    hLen   = length( h )
-    outLen = floor(int(xLen / decimation))
 
-    length( buffer ) * decimation >= xLen || error( "buffer lenght must be >= signal length * decimation" )
+    xLen        = length( x )
+    hLen        = length( h )
+    stateLen    = length( state )
+    reqStateLen = hLen-1
+    outLen      = floor(int(xLen / decimation))
 
-    criticalYidx = int(ceil(hLen / decimation)) # The index of y where our h would overlap
+    length( buffer ) >= outLen || error( "buffer lenght must be >= signal length * decimation" )
+    
+    if stateLen != reqStateLen          # TODO: write the filtering logic to not depends on state being a certain length, as the current implementation allocates useless zeros
+        if stateLen == 0
+            state = zeros( T, reqStateLen )
+        elseif stateLen < reqStateLen
+            state = [ zeros( T, reqStateLen ), state ]
+        else
+            state = state[ end+1-reqStateLen:end ]
+        end
+    end
+    
+    stateLen = length( stateLen )
+    criticalYidx = int(ceil(hLen / decimation)) # The maxximum index of y where our h*x would would rech out of bounds
     xIdx         = 1
+    
+    println( "Critical y index: ", criticalYidx )
+    
+    h = flipud(h)
 
     for yIdx = 1:criticalYidx
-
-        accumulator  = zero(T)
-        kMax = xIdx < hLen ? xIdx : hLen
-
-        for k = 1:kMax
-            @inbounds accumulator += h[ k ] * x[ xIdx+1-k ]
+        
+        hIdx        = 1
+        accumulator = zero(T)
+        println()
+        @printf( "y[%d] = ", yIdx )
+        @printf( "y[%d] = ", yIdx )
+        for stateIdx = xIdx:stateLen # this loop takes care of previous state
+            @printf( "h[%d] * state[%d] + ", hIdx, stateIdx )
+            @inbounds accumulator += h[hIdx] * state[stateIdx]
+            hIdx += 1
         end
-
+        
+        for k = 1:xIdx
+            @printf( "h[%d] * x[%d] + ", hIdx, k )
+            @inbounds accumulator += h[ hIdx ] * x[ k ]
+            hIdx += 1
+        end
+        println()
         @inbounds buffer[yIdx] = accumulator
         xIdx += decimation
     end
-
-    h = flipud(h)
 
     xIdx -= hLen
 
@@ -407,6 +433,23 @@ end
 
 decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer ) = decimate!( similar(x, int(floor(length(x)/decimation))), h, x, decimation )
 
+function filt( self::FIRFilter{FIRDecimator}, x::Vector )
+    hLen         = length( self.kernel.h )
+    xLeftoverLen = length( self.kernel.xLeftover )
+    if xLeftoverLen > 0
+        x = prepend!( x, xLeftover ) # TODO: this will be inefficient, add code to decimate! to handle previous filter execution leftoverzs        
+    end
+    xLen                  = length( x )
+    itemsToFilter         = int( floor( xLen / self.kernel.decimation ) )
+    xLeftoverLen          = xLen-itemsToFilter
+    self.kernel.xLeftover = x[end-nextLeftoverLen+1:end]
+    y                     = decimate( self.kernel.h, x, self.state )
+    self.state            = x[itemsToFilter-hLen+2:end]
+    
+    return y
+end
+
+
 function short_decimate_test( h, x, factor )
     @printf( "Radio's decimation\n\t")
     @time nativeResult = decimate( h, x, factor );
@@ -420,8 +463,8 @@ function short_decimate_test( h, x, factor )
 end
 
 #===================================
-h      = rand( 128 );
-x      = rand( 10_000_000 );
-factor = 100
+h      = rand( 10 );
+x      = rand( 100 );
+factor = 1
 short_decimate_test( h, x, factor )
 ===================================#
