@@ -33,15 +33,15 @@ end
 
 type FIRFilter{Tk<:FIRKernel} <: Filter
     kernel::Tk
-    state::Vector
+    dlyLine::Vector
 end
 
 
 function FIRFilter{Tx}( ::Type{Tx}, h::Vector )
     hLen     = length( h )
-    state  = zeros( Tx, hLen-1 )
+    dlyLine  = zeros( Tx, hLen-1 )
     kernel = FIRStandard( h )
-    FIRFilter( kernel, state )
+    FIRFilter( kernel, dlyLine )
 end
 
 FIRFilter{Tt}( h::Vector{Tt} ) = FIRFilter( Tt, h )
@@ -65,9 +65,9 @@ function FIRFilter{Tx}( ::Type{Tx}, h::Vector, resampleRatio::Rational )
     end
 
     hLen  = size(PFB)[1]
-    state = zeros( Tx, hLen - 1 )
+    dlyLine = zeros( Tx, hLen - 1 )
 
-    FIRFilter( kernel, state )
+    FIRFilter( kernel, dlyLine )
 end
 
 FIRFilter{Tt}( h::Vector{Tt}, resampleRatio::Rational ) = FIRFilter( Tt, h, resampleRatio )
@@ -107,35 +107,35 @@ end
 #               ___] | | \| |__] |___ |___    |  \ |  |  |  |___               #
 #==============================================================================#
 
-function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{T} = T[] )
+function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vector{T} = T[] )
 
     bufLen      = length( buffer )
     xLen        = length( x )
     hLen        = length( h )
-    stateLen    = length( state )
-    reqStateLen = hLen - 1
+    dlyLineLen    = length( dlyLine )
+    reqDlyLineLen = hLen - 1
 
     bufLen >= xLen || error( "buffer length must be >= x length")
 
-    if stateLen != reqStateLen          # TODO: write the filtering logic to not depends on state being a certain length, as the current implementation allocates useless zeros
-        if stateLen == 0
-            state = zeros( T, reqStateLen )
-        elseif stateLen < reqStateLen
-            state = [ zeros( T, reqStateLen ), state ]
+    if dlyLineLen != reqDlyLineLen          # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
+        if dlyLineLen == 0
+            dlyLine = zeros( T, reqDlyLineLen )
+        elseif dlyLineLen < reqDlyLineLen
+            dlyLine = [ zeros( T, reqDlyLineLen ), dlyLine ]
         else
-            state = state[ end+1-reqStateLen:end ]
+            dlyLine = dlyLine[ end+1-reqDlyLineLen:end ]
         end
     end
 
     h = flipud( h )                     # flip the h to make the multiplication more SIMD friendly
 
-    for bufIdx in 1:hLen-1              # this first loop takes care of filter ramp up and previous state
+    for bufIdx in 1:hLen-1              # this first loop takes care of filter ramp up and previous dlyLine
 
         accumulator = zero(T)
         hIdx        = 1
 
-        for stateIdx in bufIdx:stateLen # this loop takes care of previous state
-            @inbounds accumulator += h[hIdx] * state[stateIdx]
+        for dlyLineIdx in bufIdx:dlyLineLen # this loop takes care of previous dlyLine
+            @inbounds accumulator += h[hIdx] * dlyLine[dlyLineIdx]
             hIdx += 1
         end
 
@@ -165,28 +165,28 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, state::Vector{
 end
 
 
-filt{T}( h::Vector{T}, x::Vector{T}, state::Vector{T} = T[] ) = filt!( similar(x), h, x, state )
+filt{T}( h::Vector{T}, x::Vector{T}, dlyLine::Vector{T} = T[] ) = filt!( similar(x), h, x, dlyLine )
 
 function filt( self::FIRFilter{FIRStandard}, x )
     h          = self.kernel.h
     hLen       = length( h )
-    nextState  = x[end-hLen+2:end]
-    y          = filt( self.kernel.h, x, self.state )
-    self.state = nextState
+    nextDlyLine  = x[end-hLen+2:end]
+    y          = filt( self.kernel.h, x, self.dlyLine )
+    self.dlyLine = nextDlyLine
 
     return y
 end
 
 
-function short_singlerate_test( h, x, state )
+function short_singlerate_test( h, x, dlyLine )
     @printf( "Radio's Single-rate filt\n\t")
-    @time nativeResult = filt( h, x, state )
+    @time nativeResult = filt( h, x, dlyLine )
     @printf( "Base Single-rate filt\n\t")
     @time baseResult   = Base.filt( h, 1.0, x )
 
     self = FIRFilter( h )
     
-    @printf( "Stateful Single-rate filt\n\t")
+    @printf( "dlyLineful Single-rate filt\n\t")
     @time y = [ filt( self, x[1:250] ) , filt( self, x[251:end] ) ]
 
     # [ baseResult nativeResult y  ]
@@ -196,7 +196,7 @@ end
 #=============================
 h = rand( 56 )
 x = rand( 1_000_000 )
-state = zeros( length(h) - 1 )
+dlyLine = zeros( length(h) - 1 )
 
 short_singlerate_test( h, x )
 =============================#
@@ -363,26 +363,26 @@ short_rational_test( h, x, ratio )
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation::Integer, state::Vector{T} = T[] )
+function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] )
 
     xLen        = length( x )
     hLen        = length( h )
-    stateLen    = length( state )
-    reqStateLen = hLen-1
-    outLen      = int( floor( xLen / decimation ))
+    dlyLineLen    = length( dlyLine )
+    reqDlyLineLen = hLen-1
+    outLen      = int( ceil( xLen / decimation ))
 
     length( buffer ) >= outLen || error( "length(buffer) must be >= floor( length(x) / decimation)" )
 
-    if stateLen != reqStateLen                                      # TODO: write the filtering logic to not depends on state being a certain length, as the current implementation allocates useless zeros
-        println( "stateLen, $stateLen, is not the correct size")
-        if stateLen == 0
-            state = zeros( T, reqStateLen )
-        elseif stateLen < reqStateLen
-            state = [ zeros( T, reqStateLen - stateLen ), state ]
+    if dlyLineLen != reqDlyLineLen                                      # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
+        println( "dlyLineLen, $dlyLineLen, is not the correct size")
+        if dlyLineLen == 0
+            dlyLine = zeros( T, reqDlyLineLen )
+        elseif dlyLineLen < reqDlyLineLen
+            dlyLine = [ zeros( T, reqDlyLineLen - dlyLineLen ), dlyLine ]
         else
-            state = state[ end+1-reqStateLen:end ]
+            dlyLine = dlyLine[ end+1-reqDlyLineLen:end ]
         end
-        stateLen = length( state )
+        dlyLineLen = length( dlyLine )
     end
     
     criticalYidx = int(ceil(hLen / decimation))                     # The maxximum index of y where our h*x would would rech out of bounds
@@ -395,8 +395,8 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
         hIdx        = 1
         accumulator = zero(T)
 
-        for stateIdx = xIdx:stateLen                                # this loop takes care of previous state
-            @inbounds accumulator += h[hIdx] * state[stateIdx]
+        for dlyLineIdx = xIdx:dlyLineLen                                # this loop takes care of previous dlyLine
+            @inbounds accumulator += h[hIdx] * dlyLine[dlyLineIdx]
             hIdx += 1
         end
         
@@ -426,45 +426,16 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
     return buffer
 end
 
-decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, state::Vector{T} = T[] ) = decimate!( similar(x, int(floor( length( x ) / decimation )) ), h, x, decimation, state )
+decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] ) = decimate!( similar(x, int(ceil( length( x ) / decimation )) ), h, x, decimation, dlyLine )
 
 function filt( self::FIRFilter{FIRDecimator}, x::Vector )
-    hLen        = length( self.kernel.h )
-    xLen        = length( x )
-    state       = self.state
-    stateLen    = length( state )
-    decimation  = self.kernel.decimation
-    reqStateLen = hLen - 1
-    
-    if stateLen < reqStateLen
-        if stateLen + xLen < reqStateLen
-            append!( state, x )
-            return similar( x, 0 )
-        else
-            stateLenDiff = reqStateLen-stateLen
-            append!( state, x[1:stateLenDiff] )
-            x = x[stateLenDiff+1:end]
-        end
-    end
-    
-    xLen             = length( x )
-    xLeftover        = mod( xLen, decimation )
-    samplesToProcess = xLen - xLeftover
-    yLen             = int(samplesToProcess / decimation)
-    y                = similar( x, yLen )
-    
-    if xLeftover != 0        
-        nextState = x[samplesToProcess+1:end]    
-        x         = x[1:samplesToProcess]
-        decimate!( y, self.kernel.h, x, decimation, state )
-        self.state = nextState
-    else
-        nextState = x[end-hLen+1:end]
-        decimation!( y, self.kernel.h, x, decimation, state )
-        self.state = nextState
-    end
-    
-    return y
+    hLen          = length( self.kernel.h )
+    xLen          = length( x )
+    dlyLine       = self.dlyLine
+    dlyLineLen    = length( dlyLine )
+    decimation    = self.kernel.decimation
+    reqDlyLineLen = hLen - 1
+
 end
 
 
@@ -474,30 +445,37 @@ function short_decimate_test( h, x, factor )
     display( nativeResult )
     
     self = FIRFilter( h, 1//factor )
-    @printf( "\nStateful decimation\n\t")
+    @printf( "\nDlyLineful decimation\n\t")
     @time begin
         y1   = filt( self, x[1:8])
         y2   = filt( self, x[9:100] )
     end
-    statefulResult = [y1, y2]
-    display( statefulResult )
+    dlyLinefulResult = [y1, y2]
+    display( dlyLinefulResult )
     
     @printf( "\nNaive resampling\n\t")
     @time begin
-        baseResult   = Base.filt( h, 1.0, x );
-        baseResult   = baseResult[1:factor:end];
+        baseResult = Base.filt( h, 1.0, x )[1:factor:end]
     end
     display( baseResult )
     
-    areApprox( statefulResult, baseResult )
-    areApprox( nativeResult, baseResult )
+    areApprox( dlyLinefulResult, baseResult ) & areApprox( nativeResult, baseResult ) ? println( "Tests passed" ) : println( "1 or more tests failed")
 end
 
 #===================================
 
 h      = ones(10)./10;
 x      = [1.0:100];
-factor = 9
+factor = 6
+self   = FIRFilter( h, 1//factor )
+
+y = similar(x, 0)
+for i = 1:length(x)
+    y = [ y, filt( self, x[i:i] ) ]
+end
+y
+
+
 short_decimate_test( h, x, factor )
 
 ===================================#
