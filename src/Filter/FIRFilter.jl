@@ -429,27 +429,42 @@ end
 decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, state::Vector{T} = T[] ) = decimate!( similar(x, int(floor( length( x ) / decimation )) ), h, x, decimation, state )
 
 function filt( self::FIRFilter{FIRDecimator}, x::Vector )
-    hLen         = length( self.kernel.h )
-    xLeftoverLen = length( self.kernel.xLeftover )
+    hLen        = length( self.kernel.h )
+    xLen        = length( x )
+    state       = self.state
+    stateLen    = length( state )
+    decimation  = self.kernel.decimation
+    reqStateLen = hLen - 1
     
-    if xLeftoverLen > 0
-        x = prepend!( x, self.kernel.xLeftover ) # TODO: this will be inefficient, add code to decimate! to handle previous filter execution leftoverzs        
+    if stateLen < reqStateLen
+        if stateLen + xLen < reqStateLen
+            append!( state, x )
+            return similar( x, 0 )
+        else
+            stateLenDiff = reqStateLen-stateLen
+            append!( state, x[1:stateLenDiff] )
+            x = x[stateLenDiff+1:end]
+        end
     end
     
-    xLen                  = length( x )
-    xLeftoverLen          = mod( xLen, self.kernel.decimation )    
-    itemsToFilter         = xLen - xLeftoverLen    
-    self.kernel.xLeftover = x[end-xLeftoverLen+1:end]
+    xLen             = length( x )
+    xLeftover        = mod( xLen, decimation )
+    samplesToProcess = xLen - xLeftover
+    yLen             = int(samplesToProcess / decimation)
+    y                = similar( x, yLen )
     
-    if itemsToFilter < self.kernel.decimation
-        return typeof(x)[]        
+    if xLeftover != 0        
+        nextState = x[samplesToProcess+1:end]    
+        x         = x[1:samplesToProcess]
+        decimate!( y, self.kernel.h, x, decimation, state )
+        self.state = nextState
+    else
+        nextState = x[end-hLen+1:end]
+        decimation!( y, self.kernel.h, x, decimation, state )
+        self.state = nextState
     end
     
-    buffer = similar( x, int( itemsToFilter / self.kernel.decimation ))
-    decimate!( buffer, self.kernel.h, x, self.kernel.decimation, self.state )
-    self.state = x[itemsToFilter-hLen+2:itemsToFilter]    
-    
-    return buffer
+    return y
 end
 
 
