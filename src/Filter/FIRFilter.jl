@@ -369,11 +369,12 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
     hLen        = length( h )
     stateLen    = length( state )
     reqStateLen = hLen-1
-    outLen      = int(ceil(xLen / decimation))
+    outLen      = int( floor( xLen / decimation ))
 
-    length( buffer ) >= outLen || error( "buffer lenght must be >= signal length * decimation" )
-    # println( "State: ", state )
-    if stateLen != reqStateLen          # TODO: write the filtering logic to not depends on state being a certain length, as the current implementation allocates useless zeros
+    length( buffer ) >= outLen || error( "length(buffer) must be >= floor( length(x) / decimation)" )
+
+    if stateLen != reqStateLen                                      # TODO: write the filtering logic to not depends on state being a certain length, as the current implementation allocates useless zeros
+        println( "stateLen, $stateLen, is not the correct size")
         if stateLen == 0
             state = zeros( T, reqStateLen )
         elseif stateLen < reqStateLen
@@ -381,34 +382,29 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
         else
             state = state[ end+1-reqStateLen:end ]
         end
+        stateLen = length( state )
     end
     
-    stateLen = length( state )
-    criticalYidx = int(ceil(hLen / decimation)) # The maxximum index of y where our h*x would would rech out of bounds
+    criticalYidx = int(ceil(hLen / decimation))                     # The maxximum index of y where our h*x would would rech out of bounds
     xIdx         = 1
     
-    h = flipud(h)
+    h = flipud(h)                                                   # TODO: figure out a way to not always have to flip taps each time
 
     for yIdx = 1:criticalYidx
         
         hIdx        = 1
         accumulator = zero(T)
-        # println()
-        # @printf( "y[%d] = \n", yIdx )
-        # @printf( "xIdx = %d\n", xIdx )
-        # @printf( "stateLen = %d\n", stateLen )
-        for stateIdx = xIdx:stateLen # this loop takes care of previous state
-            # @printf( "h[%d] * state[%d] + ", hIdx, stateIdx )
+
+        for stateIdx = xIdx:stateLen                                # this loop takes care of previous state
             @inbounds accumulator += h[hIdx] * state[stateIdx]
             hIdx += 1
         end
         
         for k = 1:xIdx
-            # @printf( "h[%d] * x[%d] + ", hIdx, k )
             @inbounds accumulator += h[ hIdx ] * x[ k ]
             hIdx += 1
         end
-        # println()
+
         @inbounds buffer[yIdx] = accumulator
         xIdx += decimation
     end
@@ -430,48 +426,63 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
     return buffer
 end
 
-decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, state::Vector{T} = T[] ) = decimate!( similar(x, int(ceil(length(x)/decimation))), h, x, decimation, state )
+decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, state::Vector{T} = T[] ) = decimate!( similar(x, int(floor( length( x ) / decimation )) ), h, x, decimation, state )
 
 function filt( self::FIRFilter{FIRDecimator}, x::Vector )
     hLen         = length( self.kernel.h )
     xLeftoverLen = length( self.kernel.xLeftover )
+    
     if xLeftoverLen > 0
         x = prepend!( x, self.kernel.xLeftover ) # TODO: this will be inefficient, add code to decimate! to handle previous filter execution leftoverzs        
     end
-    xLen                  = length( x )
-    itemsToFilter         = int( floor( xLen / self.kernel.decimation ) ) * self.kernel.decimation
-    xLeftoverLen          = xLen-itemsToFilter
-    self.kernel.xLeftover = x[end-xLeftoverLen+1:end]
-    y                     = decimate( self.kernel.h, x, self.kernel.decimation, self.state )
-    @printf( "self.state = x[%d-%d+2:end]\n", itemsToFilter, hLen)
-    self.state            = x[itemsToFilter-hLen+2:end]
     
-    return y
+    xLen                  = length( x )
+    xLeftoverLen          = mod( xLen, self.kernel.decimation )    
+    itemsToFilter         = xLen - xLeftoverLen    
+    self.kernel.xLeftover = x[end-xLeftoverLen+1:end]
+    
+    if itemsToFilter < self.kernel.decimation
+        return typeof(x)[]        
+    end
+    
+    buffer = similar( x, int( itemsToFilter / self.kernel.decimation ))
+    decimate!( buffer, self.kernel.h, x, self.kernel.decimation, self.state )
+    self.state = x[itemsToFilter-hLen+2:itemsToFilter]    
+    
+    return buffer
 end
 
 
 function short_decimate_test( h, x, factor )
-    @printf( "Radio's decimation\n\t")
-    @time nativeResult = decimate( h, x, factor );
+    @printf( "\nRadio's decimation\n\t")
+    @time nativeResult = decimate( h, x, factor )
     display( nativeResult )
     
-    @printf( "Naive resampling\n\t")
+    self = FIRFilter( h, 1//factor )
+    @printf( "\nStateful decimation\n\t")
+    @time begin
+        y1   = filt( self, x[1:8])
+        y2   = filt( self, x[9:100] )
+    end
+    statefulResult = [y1, y2]
+    display( statefulResult )
+    
+    @printf( "\nNaive resampling\n\t")
     @time begin
         baseResult   = Base.filt( h, 1.0, x );
         baseResult   = baseResult[1:factor:end];
     end
     display( baseResult )
+    
+    areApprox( statefulResult, baseResult )
     areApprox( nativeResult, baseResult )
 end
 
 #===================================
 
-h      = ones(13)./13;
+h      = ones(10)./10;
 x      = [1.0:100];
-factor = 10
+factor = 9
 short_decimate_test( h, x, factor )
-
-self = FIRFilter( h, 1//9 )
-[ filt( self, x[1:29]), filt( self, x[30:100] ) ]
 
 ===================================#
