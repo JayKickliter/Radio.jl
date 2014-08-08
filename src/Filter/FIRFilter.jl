@@ -55,7 +55,7 @@ function FIRFilter{Tx}( ::Type{Tx}, h::Vector, resampleRatio::Rational )
         return FIRFilter( Tx, h )
     elseif interploation == 1
         PFB    = h
-        kernel = FIRDecimator( PFB, decimation, Tx[] )
+        kernel = FIRDecimator( PFB, decimation, zeros( Tx, decimation-1 ) )
     elseif decimation == 1
         PFB    = polyize( h, interploation )
         kernel = FIRInterpolator( PFB, interploation, Tx[] )
@@ -365,11 +365,11 @@ short_rational_test( h, x, ratio )
 
 function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] )
 
-    xLen        = length( x )
-    hLen        = length( h )
+    xLen          = length( x )
+    hLen          = length( h )
     dlyLineLen    = length( dlyLine )
     reqDlyLineLen = hLen-1
-    outLen      = int( ceil( xLen / decimation ))
+    outLen        = int( ceil( xLen / decimation ))
 
     length( buffer ) >= outLen || error( "length(buffer) must be >= floor( length(x) / decimation)" )
 
@@ -429,13 +429,41 @@ end
 decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] ) = decimate!( similar(x, int(ceil( length( x ) / decimation )) ), h, x, decimation, dlyLine )
 
 function filt( self::FIRFilter{FIRDecimator}, x::Vector )
-    hLen          = length( self.kernel.h )
     xLen          = length( x )
+    h             = self.kernel.h
+    hLen          = length( h )
+    reqDlyLineLen = hLen - 1
     dlyLine       = self.dlyLine
     dlyLineLen    = length( dlyLine )
     decimation    = self.kernel.decimation
-    reqDlyLineLen = hLen - 1
-
+    xLeftover     = self.kernel.xLeftover
+    xLeftoverLen  = length( xLeftover )
+    
+    emptyResult = similar( x, 0 )
+    
+    # if there are no leftovers, the next x index an integer multiple of decimation
+    if xLeftoverLen == 0
+        nextLeftoverLen       = mod( xLen, decimation )
+        nextLeftover          = x[end-nextLeftoverLen+1:end]
+        self.kernel.xLeftover = nextLeftover
+        return decimate( h, x, decimation, dlyLine )
+    end
+    
+    if xLeftoverLen + xLen >= decimation
+        dlyLine         = [dlyLine, xLeftover, x[1:decimation-1-xLeftoverLen]][1:reqDlyLineLen]
+        self.dlyLine    = dlyLine
+        xStart          = decimation-xLeftoverLen
+        x               = x[xStart:end]
+        xLen            = length( x )
+        nextLeftoverLen = mod( xLen, decimation )
+        nextLeftover    = x[end-nextLeftoverLen+1:end]
+        self.kernel.xLeftover = nextLeftover
+        return decimate( h, x, decimation, dlyLine )
+    end
+    
+    append!( xLeftover, x )
+    
+    return emptyResult
 end
 
 
@@ -471,7 +499,9 @@ self   = FIRFilter( h, 1//factor )
 
 y = similar(x, 0)
 for i = 1:length(x)
-    y = [ y, filt( self, x[i:i] ) ]
+    yNext = filt( self, x[i:i] )
+    display( yNext )
+    y = [y, yNext]
 end
 y
 
