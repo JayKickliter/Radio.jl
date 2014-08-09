@@ -76,6 +76,22 @@ FIRFilter{Tt}( h::Vector{Tt}, resampleRatio::Rational ) = FIRFilter( Tt, h, resa
 
 
 #==============================================================================#
+#                           ____ _    _  _ ____ _  _                           #
+#                           |___ |    |  | [__  |__|                           #
+#                           |    |___ |__| ___] |  |                           #
+#==============================================================================#
+
+function flush( self::FIRFilter )
+    dlyLine = self.dlyLine
+    for i = 1:length( dlyLine )
+        dlyLine[i] = 0
+    end
+end
+
+
+
+
+#==============================================================================#
 #                      _  _    ___ ____    ___  ____ ___                       #
 #                      |__|     |  |  |    |__] |___ |__]                      #
 #                      |  |     |  |__|    |    |    |__]                      #
@@ -374,7 +390,6 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
     length( buffer ) >= outLen || error( "length(buffer) must be >= floor( length(x) / decimation)" )
 
     if dlyLineLen != reqDlyLineLen                                      # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
-        println( "dlyLineLen, $dlyLineLen, is not the correct size")
         if dlyLineLen == 0
             dlyLine = zeros( T, reqDlyLineLen )
         elseif dlyLineLen < reqDlyLineLen
@@ -428,7 +443,7 @@ end
 
 decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] ) = decimate!( similar(x, int(ceil( length( x ) / decimation )) ), h, x, decimation, dlyLine )
 
-function filt( self::FIRFilter{FIRDecimator}, x::Vector )
+function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     xLen          = length( x )
     h             = self.kernel.h
     hLen          = length( h )
@@ -438,74 +453,91 @@ function filt( self::FIRFilter{FIRDecimator}, x::Vector )
     decimation    = self.kernel.decimation
     xLeftover     = self.kernel.xLeftover
     xLeftoverLen  = length( xLeftover )
+    combinedLen   = xLeftoverLen + xLen
     
-    emptyResult = similar( x, 0 )
-    
-    # if there are no leftovers, the next x index an integer multiple of decimation
-    if xLeftoverLen == 0
-        nextLeftoverLen       = mod( xLen, decimation )
-        nextLeftover          = x[end-nextLeftoverLen+1:end]
-        self.kernel.xLeftover = nextLeftover
-        return decimate( h, x, decimation, dlyLine )
+    if combinedLen == decimation
+        x            = x[end:end]
+        self.dlyLine = [ dlyLine, xLeftover, x][end-reqDlyLineLen:end-1]
+        
+        println( "  xLeftover = $(self.kernel.xLeftover.')")
+        println( "  dlyLine   = $(self.dlyLine.')")
+        
+        y       = decimate( h, x, decimation, self.dlyLine )
+
+        self.dlyLine          = [ self.dlyLine, x][end-reqDlyLineLen+1:end]
+        self.kernel.xLeftover = T[]        
+        
+        return y
     end
-    
-    if xLeftoverLen + xLen >= decimation
-        dlyLine         = [dlyLine, xLeftover, x[1:decimation-1-xLeftoverLen]][1:reqDlyLineLen]
-        self.dlyLine    = dlyLine
-        xStart          = decimation-xLeftoverLen
-        x               = x[xStart:end]
-        xLen            = length( x )
-        nextLeftoverLen = mod( xLen, decimation )
-        nextLeftover    = x[end-nextLeftoverLen+1:end]
-        self.kernel.xLeftover = nextLeftover
-        return decimate( h, x, decimation, dlyLine )
-    end
-    
-    append!( xLeftover, x )
-    
-    return emptyResult
+
+    println( "  xLeftover = $(self.kernel.xLeftover.')")
+    println( "  dlyLine   = $(self.dlyLine.')")
+
+    append!( xLeftover, x )    
+    return T[]
 end
 
 
 function short_decimate_test( h, x, factor )
-    @printf( "\nRadio's decimation\n\t")
-    @time nativeResult = decimate( h, x, factor )
-    display( nativeResult )
-    
-    self = FIRFilter( h, 1//factor )
-    @printf( "\nDlyLineful decimation\n\t")
-    @time begin
-        y1   = filt( self, x[1:8])
-        y2   = filt( self, x[9:100] )
+    # @printf( "\nRadio's decimation\n\t")
+    # @time nativeResult = decimate( h, x, factor )
+    # display( nativeResult )
+    #
+    # self = FIRFilter( h, 1//factor )
+    # @printf( "\nDlyLineful decimation\n\t")
+    # @time begin
+    #     y1   = filt( self, x[1:8])
+    #     y2   = filt( self, x[9:100] )
+    # end
+    # dlyLinefulResult = [y1, y2]
+    # display( dlyLinefulResult )
+    #
+    # @printf( "\nNaive resampling\n\t")
+    # @time begin
+    #     baseResult = Base.filt( h, 1.0, x )[1:factor:end]
+    # end
+    # display( baseResult )
+    #
+    # areApprox( dlyLinefulResult, baseResult ) & areApprox( nativeResult, baseResult ) ? println( "Tests passed" ) : println( "1 or more tests failed")
+    self   = FIRFilter( h, 1//factor )
+    y      = similar(x, 0)
+    for i  = 1:length(x)
+        println()
+        println()
+        println( "i: $i")
+        # println( "  length(xLeftover) = $(length(self.kernel.xLeftover.'))")
+        # println( "  xLeftover = $(self.kernel.xLeftover.')")
+        # println( "  dlyLine   = $(self.dlyLine.')")
+        # println( "  y         = $(y.')")
+        yNext                         = filt( self, x[i:i] )
+        y                             = [y, yNext]
+        println( "  y         = $(y.')")        
+        println( "  xLeftover = $(self.kernel.xLeftover.')")
+        println( "  dlyLine   = $(self.dlyLine.')")
+        # println()
+        # println( "After filtering:")
+        # println( "  xLeftover   = $(self.kernel.xLeftover.')")
+        # println( "  dlyLine     = $(self.dlyLine.')")
+        # println( "  yNext       = $yNext")
+        # println( "  length( y ) = $(length(y))")
+        # println( "  y           = $(y.')")
     end
-    dlyLinefulResult = [y1, y2]
-    display( dlyLinefulResult )
     
-    @printf( "\nNaive resampling\n\t")
-    @time begin
-        baseResult = Base.filt( h, 1.0, x )[1:factor:end]
-    end
-    display( baseResult )
+    display(y)
     
-    areApprox( dlyLinefulResult, baseResult ) & areApprox( nativeResult, baseResult ) ? println( "Tests passed" ) : println( "1 or more tests failed")
 end
 
 #===================================
-
-h      = ones(10)./10;
-x      = [1.0:100];
-factor = 6
-self   = FIRFilter( h, 1//factor )
-
-y = similar(x, 0)
-for i = 1:length(x)
-    yNext = filt( self, x[i:i] )
-    display( yNext )
-    y = [y, yNext]
-end
-y
-
-
+    
+h      = [1:10];
+x      = [1:25];
+factor = 5;
 short_decimate_test( h, x, factor )
 
+
+h      = [1:10];
+x      = [1:25];
+factor = 5;
+dlyLine = zeros(typeof(h[1]), length(h)-1)
+decimate( h, x, factor, )
 ===================================#
