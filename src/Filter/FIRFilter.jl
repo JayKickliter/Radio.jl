@@ -386,7 +386,7 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
     dlyLineLen    = length( dlyLine )
     reqDlyLineLen = hLen-1
     outLen        = int( ceil( xLen / decimation ))
-
+ 
     length( buffer ) >= outLen || error( "length(buffer) must be >= floor( length(x) / decimation)" )
 
     if dlyLineLen != reqDlyLineLen                                      # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
@@ -445,24 +445,16 @@ decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T}
 
 function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     xLen          = length( x )
-    h             = self.kernel.h
-    hLen          = length( h )
-    reqDlyLineLen = hLen - 1
-    dlyLine       = self.dlyLine
-    dlyLineLen    = length( dlyLine )
-    decimation    = self.kernel.decimation
-    xLeftover     = self.kernel.xLeftover
-    xLeftoverLen  = length( xLeftover )
+    xLeftoverLen  = length( self.kernel.xLeftover )
     combinedLen   = xLeftoverLen + xLen
+    reqDlyLineLen = length( self.kernel.h ) - 1
+    dlyLineLen    = length( self.dlyLine )
     
-    if combinedLen == decimation
+    if combinedLen == self.kernel.decimation
         x            = x[end:end]
-        self.dlyLine = [ dlyLine, xLeftover, x][end-reqDlyLineLen:end-1]
-        
-        println( "  xLeftover = $(self.kernel.xLeftover.')")
-        println( "  dlyLine   = $(self.dlyLine.')")
-        
-        y       = decimate( h, x, decimation, self.dlyLine )
+        self.dlyLine = [ self.dlyLine, self.kernel.xLeftover, x][end-reqDlyLineLen:end-1]
+
+        y = decimate( h, x, self.kernel.decimation, self.dlyLine )
 
         self.dlyLine          = [ self.dlyLine, x][end-reqDlyLineLen+1:end]
         self.kernel.xLeftover = T[]        
@@ -470,10 +462,7 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
         return y
     end
 
-    println( "  xLeftover = $(self.kernel.xLeftover.')")
-    println( "  dlyLine   = $(self.dlyLine.')")
-
-    append!( xLeftover, x )    
+    append!( self.kernel.xLeftover, x )
     return T[]
 end
 
@@ -502,18 +491,18 @@ function short_decimate_test( h, x, factor )
     self   = FIRFilter( h, 1//factor )
     y      = similar(x, 0)
     for i  = 1:length(x)
-        println()
-        println()
-        println( "i: $i")
+        # println()
+        # println()
+        # println( "i: $i")
         # println( "  length(xLeftover) = $(length(self.kernel.xLeftover.'))")
         # println( "  xLeftover = $(self.kernel.xLeftover.')")
         # println( "  dlyLine   = $(self.dlyLine.')")
         # println( "  y         = $(y.')")
         yNext                         = filt( self, x[i:i] )
         y                             = [y, yNext]
-        println( "  y         = $(y.')")        
-        println( "  xLeftover = $(self.kernel.xLeftover.')")
-        println( "  dlyLine   = $(self.dlyLine.')")
+        # println( "  y         = $(y.')")        
+        # println( "  xLeftover = $(self.kernel.xLeftover.')")
+        # println( "  dlyLine   = $(self.dlyLine.')")
         # println()
         # println( "After filtering:")
         # println( "  xLeftover   = $(self.kernel.xLeftover.')")
