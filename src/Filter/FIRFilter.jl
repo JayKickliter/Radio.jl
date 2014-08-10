@@ -20,7 +20,6 @@ end
 type FIRDecimator <: FIRKernel
     h::Vector
     decimation::Int
-    xLeftover::Vector
 end
 
 # Rational resampler FIR kernel
@@ -34,6 +33,7 @@ end
 type FIRFilter{Tk<:FIRKernel} <: Filter
     kernel::Tk
     dlyLine::Vector
+    reqDlyLineLen::Int
 end
 
 
@@ -41,7 +41,7 @@ function FIRFilter{Tx}( ::Type{Tx}, h::Vector )
     hLen     = length( h )
     dlyLine  = zeros( Tx, hLen-1 )
     kernel = FIRStandard( h )
-    FIRFilter( kernel, dlyLine )
+    FIRFilter( kernel, dlyLine, hLen-1 )
 end
 
 FIRFilter{Tt}( h::Vector{Tt} ) = FIRFilter( Tt, h )
@@ -50,12 +50,14 @@ function FIRFilter{Tx}( ::Type{Tx}, h::Vector, resampleRatio::Rational )
 
     interploation = num( resampleRatio )
     decimation    = den( resampleRatio )
-
+    reqDlyLineLen = 0
+    
     if resampleRatio == 1
         return FIRFilter( Tx, h )
     elseif interploation == 1
-        PFB    = h
-        kernel = FIRDecimator( PFB, decimation, zeros( Tx, decimation-1 ) )
+        PFB           = h
+        reqDlyLineLen = max( decimation-1, length(h)-1 ) 
+        kernel        = FIRDecimator( PFB, decimation )
     elseif decimation == 1
         PFB    = polyize( h, interploation )
         kernel = FIRInterpolator( PFB, interploation, Tx[] )
@@ -65,9 +67,9 @@ function FIRFilter{Tx}( ::Type{Tx}, h::Vector, resampleRatio::Rational )
     end
 
     hLen  = size(PFB)[1]
-    dlyLine = zeros( Tx, hLen - 1 )
+    dlyLine = zeros( Tx, reqDlyLineLen )
 
-    FIRFilter( kernel, dlyLine )
+    FIRFilter( kernel, dlyLine, reqDlyLineLen )
 end
 
 FIRFilter{Tt}( h::Vector{Tt}, resampleRatio::Rational ) = FIRFilter( Tt, h, resampleRatio )
@@ -411,16 +413,16 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
         accumulator = zero(T)
 
         for dlyLineIdx = xIdx:dlyLineLen                                # this loop takes care of previous dlyLine
-            @inbounds accumulator += h[hIdx] * dlyLine[dlyLineIdx]
+            accumulator += h[hIdx] * dlyLine[dlyLineIdx]
             hIdx += 1
         end
         
         for k = 1:xIdx
-            @inbounds accumulator += h[ hIdx ] * x[ k ]
+            accumulator += h[ hIdx ] * x[ k ]
             hIdx += 1
         end
 
-        @inbounds buffer[yIdx] = accumulator
+        buffer[yIdx] = accumulator
         xIdx += decimation
     end
 
@@ -431,10 +433,10 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
         accumulator  = zero(T)
 
         for k = 1:hLen
-            @inbounds accumulator += h[ k ] * x[ xIdx+k ]
+            accumulator += h[ k ] * x[ xIdx+k ]
         end
 
-        @inbounds buffer[yIdx] = accumulator
+        buffer[yIdx] = accumulator
         xIdx += decimation
     end
 
@@ -445,29 +447,44 @@ decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T}
 
 function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     xLen          = length( x )
-    xLeftoverLen  = length( self.kernel.xLeftover )
-    combinedLen   = xLeftoverLen + xLen
-    reqDlyLineLen = length( self.kernel.h ) - 1
-    dlyLineLen    = length( self.dlyLine )
+    h             = self.kernel.h
+    decimation    = self.kernel.decimation
+    dlyLine       = self.dlyLine
+    dlyLineLen    = length( dlyLine )
+    reqDlyLineLen = self.reqDlyLineLen
+    combinedLen   = dlyLineLen + xLen
+    y             = T[]
     
-    if combinedLen == self.kernel.decimation
-        x            = x[end:end]
-        self.dlyLine = [ self.dlyLine, self.kernel.xLeftover, x][end-reqDlyLineLen:end-1]
+    if combinedLen > reqDlyLineLen        
 
-        y = decimate( h, x, self.kernel.decimation, self.dlyLine )
-
-        self.dlyLine          = [ self.dlyLine, x][end-reqDlyLineLen+1:end]
-        self.kernel.xLeftover = T[]        
+        self.dlyLine   = [ dlyLine, x ][1:reqDlyLineLen]
+        x              = [ dlyLine, x ][reqDlyLineLen+1:end]        
+        y              = decimate( h, x, decimation, self.dlyLine )        
+        xLen           = length( x )
+        xLeftoverLen   = 0
+        nextDlyLineLen = reqDlyLineLen - decimation + 1
         
+        if xLen > decimation
+            xLeftoverLen = mod( xLen-1, decimation )
+            nextDlyLineLen += xLeftoverLen 
+        else
+            xLeftoverLen    = xLen - 1
+            nextDlyLineLen += xLeftoverLen
+        end
+
+        self.dlyLine = [ self.dlyLine, x ][end-nextDlyLineLen+1:end]
+                
         return y
     end
+    
+    append!( dlyLine, x )
 
-    append!( self.kernel.xLeftover, x )
-    return T[]
+    return y
 end
 
 
-function short_decimate_test( h, x, factor )
+function short_decimate_test( h, x, factor, step = 2 )
+    xLen = length(x)
     # @printf( "\nRadio's decimation\n\t")
     # @time nativeResult = decimate( h, x, factor )
     # display( nativeResult )
@@ -483,50 +500,32 @@ function short_decimate_test( h, x, factor )
     #
     # @printf( "\nNaive resampling\n\t")
     # @time begin
-    #     baseResult = Base.filt( h, 1.0, x )[1:factor:end]
+        baseResult = Base.filt( h, 1.0, x )[1:factor:end]
     # end
     # display( baseResult )
     #
     # areApprox( dlyLinefulResult, baseResult ) & areApprox( nativeResult, baseResult ) ? println( "Tests passed" ) : println( "1 or more tests failed")
-    self   = FIRFilter( h, 1//factor )
-    y      = similar(x, 0)
-    for i  = 1:length(x)
-        # println()
-        # println()
-        # println( "i: $i")
-        # println( "  length(xLeftover) = $(length(self.kernel.xLeftover.'))")
-        # println( "  xLeftover = $(self.kernel.xLeftover.')")
-        # println( "  dlyLine   = $(self.dlyLine.')")
-        # println( "  y         = $(y.')")
-        yNext                         = filt( self, x[i:i] )
-        y                             = [y, yNext]
-        # println( "  y         = $(y.')")        
-        # println( "  xLeftover = $(self.kernel.xLeftover.')")
-        # println( "  dlyLine   = $(self.dlyLine.')")
-        # println()
-        # println( "After filtering:")
-        # println( "  xLeftover   = $(self.kernel.xLeftover.')")
-        # println( "  dlyLine     = $(self.dlyLine.')")
-        # println( "  yNext       = $yNext")
-        # println( "  length( y ) = $(length(y))")
-        # println( "  y           = $(y.')")
+    self      = FIRFilter( h, 1//factor )
+    incResult = similar(x, 0)
+    for i in 1:step:xLen
+        xNext = [ i : min(i+step-1, xLen) ]
+        append!( incResult, filt( self, xNext ) )
     end
     
-    display(y)
+    println()
+    println()
     
+    minLen = min( length(baseResult), length( incResult ) )
+    display( [ baseResult[1:minLen] incResult[1:minLen] ] )
 end
 
-#===================================
-    
-h      = [1:10];
+#===================================    
+h      = [1:11];
 x      = [1:25];
 factor = 5;
-short_decimate_test( h, x, factor )
 
+short_decimate_test( h, x, factor, 1 )
 
-h      = [1:10];
-x      = [1:25];
-factor = 5;
-dlyLine = zeros(typeof(h[1]), length(h)-1)
-decimate( h, x, factor, )
+self   = FIRFilter( h, 1//factor ); filt(self, x)
+
 ===================================#
