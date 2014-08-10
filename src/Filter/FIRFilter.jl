@@ -382,7 +382,7 @@ short_rational_test( h, x, ratio )
 #==============================================================================#
 
 function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] )
-
+    
     xLen          = length( x )
     hLen          = length( h )
     dlyLineLen    = length( dlyLine )
@@ -402,7 +402,7 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
         dlyLineLen = length( dlyLine )
     end
     
-    criticalYidx = int(ceil(hLen / decimation))                     # The maxximum index of y where our h*x would would rech out of bounds
+    criticalYidx = min(int(ceil(hLen / decimation)), outLen)              # The maxximum index of y where our h*x would would rech out of bounds
     xIdx         = 1
     
     h = flipud(h)                                                   # TODO: figure out a way to not always have to flip taps each time
@@ -439,8 +439,13 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
         buffer[yIdx] = accumulator
         xIdx += decimation
     end
+    
+    xIdx += hLen - decimation
+    xIdx += 1
+    
+    xLeftover = xIdx <= xLen ? x[xIdx:end] : T[]
 
-    return buffer
+    return buffer, xLeftover
 end
 
 decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] ) = decimate!( similar(x, int(ceil( length( x ) / decimation )) ), h, x, decimation, dlyLine )
@@ -471,8 +476,14 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
             xLeftoverLen    = xLen - 1
             nextDlyLineLen += xLeftoverLen
         end
-
+        
+        print( "filt" )
+        println( "    xLeftoverLen = $xLeftoverLen" )
+        println( "    self.dlyLine = $(self.dlyLine)" )
         self.dlyLine = [ self.dlyLine, x ][end-nextDlyLineLen+1:end]
+        println( "    self.dlyLine = $(self.dlyLine)" )
+        println( "    xLeftover = $(self.dlyLine[end-xLeftoverLen+1:end])")
+        
                 
         return y
     end
@@ -519,10 +530,12 @@ function short_decimate_test( h, x, factor, step = 2 )
     display( [ baseResult[1:minLen] incResult[1:minLen] ] )
 end
 
-#===================================    
-h      = [1:11];
+
+h      = [1:10];
 x      = [1:25];
 factor = 5;
+
+#===================================
 
 short_decimate_test( h, x, factor, 1 )
 
