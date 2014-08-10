@@ -441,14 +441,17 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
     end
     
     xIdx += hLen - decimation
-    xIdx += 1
     
-    xLeftover = xIdx <= xLen ? x[xIdx:end] : T[]
+    xLeftoverLen = max( xLen - xIdx, 0 )
 
-    return buffer, xLeftover
+    return buffer, xLeftoverLen
 end
 
-decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] ) = decimate!( similar(x, int(ceil( length( x ) / decimation )) ), h, x, decimation, dlyLine )
+function decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] )
+    xLen   = length( x )
+    buffer = similar(x, int(ceil( xLen / decimation )) )
+    decimate!( buffer, h, x, decimation, dlyLine )    
+end
 
 function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     xLen          = length( x )
@@ -462,39 +465,21 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     
     if combinedLen > reqDlyLineLen        
 
-        self.dlyLine   = [ dlyLine, x ][1:reqDlyLineLen]
-        x              = [ dlyLine, x ][reqDlyLineLen+1:end]        
-        y              = decimate( h, x, decimation, self.dlyLine )        
-        xLen           = length( x )
-        xLeftoverLen   = 0
-        nextDlyLineLen = reqDlyLineLen - decimation + 1
+        self.dlyLine      = [ dlyLine, x ][1:reqDlyLineLen]
+        x                 = [ dlyLine, x ][reqDlyLineLen+1:end]        
+        (y, xLeftoverLen) = decimate( h, x, decimation, self.dlyLine )
         
-        if xLen > decimation
-            xLeftoverLen = mod( xLen-1, decimation )
-            nextDlyLineLen += xLeftoverLen 
-        else
-            xLeftoverLen    = xLen - 1
-            nextDlyLineLen += xLeftoverLen
-        end
-        
-        print( "filt" )
-        println( "    xLeftoverLen = $xLeftoverLen" )
-        println( "    self.dlyLine = $(self.dlyLine)" )
-        self.dlyLine = [ self.dlyLine, x ][end-nextDlyLineLen+1:end]
-        println( "    self.dlyLine = $(self.dlyLine)" )
-        println( "    xLeftover = $(self.dlyLine[end-xLeftoverLen+1:end])")
-        
-                
-        return y
-    end
-    
-    append!( dlyLine, x )
+        nextDlyLineLen = reqDlyLineLen - decimation + 1 + xLeftoverLen        
+        self.dlyLine   = [ self.dlyLine, x ][end-nextDlyLineLen+1:end]                        
+    else
+        append!( dlyLine, x )
+    end        
 
     return y
 end
 
 
-function short_decimate_test( h, x, factor, step = 2 )
+function short_decimate_test( h, x, factor, step )
     xLen = length(x)
     # @printf( "\nRadio's decimation\n\t")
     # @time nativeResult = decimate( h, x, factor )
@@ -511,7 +496,7 @@ function short_decimate_test( h, x, factor, step = 2 )
     #
     # @printf( "\nNaive resampling\n\t")
     # @time begin
-        baseResult = Base.filt( h, 1.0, x )[1:factor:end]
+        baseResult = Base.filt( h, one(x[1]), x )[1:factor:end]
     # end
     # display( baseResult )
     #
@@ -521,23 +506,26 @@ function short_decimate_test( h, x, factor, step = 2 )
     for i in 1:step:xLen
         xNext = [ i : min(i+step-1, xLen) ]
         append!( incResult, filt( self, xNext ) )
+        println( "incResult = $(incResult.') ")
     end
-    
     println()
     println()
     
     minLen = min( length(baseResult), length( incResult ) )
     display( [ baseResult[1:minLen] incResult[1:minLen] ] )
+    
+    passed = areApprox( baseResult, incResult )
+    println( "Passed = $passed" )
 end
 
 
-h      = [1:10];
+h      = [1:360];
 x      = [1:25];
 factor = 5;
 
 #===================================
 
-short_decimate_test( h, x, factor, 1 )
+short_decimate_test( h, x, factor, 2 )
 
 self   = FIRFilter( h, 1//factor ); filt(self, x)
 
