@@ -1,10 +1,20 @@
 module Multirate
 
-import Main: areApprox
+export  FIRFilter,
+        decimate!,
+        decimate,
+        filt!,
+        filt,
+        interpolate!,
+        interpolate,
+        polyize,
+        resample!,
+        resample
 
 #==============================================================================#
 #                                    Types                                     #
 #==============================================================================#
+
 abstract Filter
 abstract FIRKernel
 
@@ -149,9 +159,9 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vecto
         end
     end
 
-    h = flipud( h )                     # flip the h to make the multiplication more SIMD friendly
+    h = flipud( h )                         # flip the h to make the multiplication more SIMD friendly
 
-    for bufIdx in 1:hLen-1              # this first loop takes care of filter ramp up and previous dlyLine
+    for bufIdx in 1:hLen-1                  # this first loop takes care of filter ramp up and previous dlyLine
 
         accumulator = zero(T)
         hIdx        = 1
@@ -162,7 +172,7 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vecto
         end
 
         hIdx = hLen-bufIdx+1
-        for xIdx in 1:bufIdx            # this loop takes care of the first hlen-1 samples in x
+        for xIdx in 1:bufIdx                # this loop takes care of the first hlen-1 samples in x
             @inbounds accumulator += h[hIdx] * x[xIdx]
             hIdx += 1
         end
@@ -170,7 +180,7 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vecto
         @inbounds buffer[bufIdx] = accumulator
     end
 
-    for bufIdx in hLen:xLen             # filter ramp is complete, normal filtering from this point on
+    for bufIdx in hLen:xLen                 # filter ramp is complete, normal filtering from this point on
 
         accumulator = zero(T)
         xIdx        = bufIdx-hLen+1
@@ -200,30 +210,6 @@ function filt( self::FIRFilter{FIRStandard}, x )
 end
 
 
-function short_singlerate_test( h, x, dlyLine )
-    @printf( "Radio's Single-rate filt\n\t")
-    @time nativeResult = filt( h, x, dlyLine )
-    @printf( "Base Single-rate filt\n\t")
-    @time baseResult   = Base.filt( h, 1.0, x )
-
-    self = FIRFilter( h )
-    
-    @printf( "dlyLineful Single-rate filt\n\t")
-    @time y = [ filt( self, x[1:250] ) , filt( self, x[251:end] ) ]
-
-    # [ baseResult nativeResult y  ]
-    areApprox( nativeResult, baseResult ) && areApprox( y, baseResult )    
-end
-
-#=============================
-h = rand( 56 )
-x = rand( 1_000_000 )
-dlyLine = zeros( length(h) - 1 )
-
-short_singlerate_test( h, x )
-=============================#
-
-
 
 
 #==============================================================================#
@@ -242,8 +228,7 @@ function interpolate!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T} )
     yIdx = 1
 
     for xIdx = 1:hLen-1, φ = 1:Nφ  # until xIdx == hLen, x[xIdx-m+1] would reach out of bounds
-                                   # this first loop limits xIdx-m+1 to a minimum of 1
-        accumulator = zero(T)
+        accumulator = zero(T)      # this first loop limits xIdx-m+1 to a minimum of 1
         for Tn = 1:xIdx            # for each tap in phase[n]
             @inbounds accumulator += PFB[Tn, φ] * x[xIdx-Tn+1]
         end
@@ -276,29 +261,6 @@ interpolate( h, x, interpolation )               = interpolate( polyize( h, inte
 function filt( self::FIRFilter{FIRInterpolator}, x )
    interpolate( self.kernel.PFB, x )
 end
-
-function short_interpolate_test( h, x, factor )    
-    @printf( "Radio's interpolate\n\t")
-    @time nativeResult = interpolate( h, x, factor )
-    @printf( "Naive interpolate\n\t")
-    @time begin
-        xx = zeros( length(x) * factor )
-        for n = 0:length(x)-1;
-            xx[ n*factor+1 ] = x[ n+1 ]
-        end
-        baseResult = Base.filt( h, 1.0, xx )        
-    end
-        
-    areApprox( nativeResult, baseResult )
-end
-
-#=============================
-h = rand( 56 )
-x = rand( 1_000_000 )
-factor = 4
-
-short_interpolate_test( h, x, factor )
-=============================#
 
 
 
@@ -345,38 +307,6 @@ end
 
 resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h, num(ratio)), x, ratio )
 
-function short_rational_test( h, x, ratio )
-    upfactor   = num( ratio )
-    downfactor = den( ratio )
-    
-    @printf( "Radio's rational resampling\n\t")
-    @time nativeResult = resample( h, x, upfactor//downfactor );
-    
-    @printf( "Naive resampling\n\t")
-    @time begin
-        xx         = zeros( length(x) * upfactor );
-        baseResult = similar( x, int( length(x) * upfactor / downfactor ))
-        
-        for n = 0:length(x)-1;
-            xx[ n*upfactor+1 ] = x[ n+1 ];
-        end
-        
-        baseResultInterpolated = Base.filt( h, 1.0, xx );
-        baseResult = [ baseResultInterpolated[n] for n = 1:downfactor:length( baseResultInterpolated ) ]
-    end
-    
-    [ baseResult nativeResult ]
-    areApprox( nativeResult, baseResult )
-end
-
-#=========================
-ratio = 3//4
-h     = rand( 56 )
-x     = rand( 1000000 )
-short_rational_test( h, x, ratio )
-=========================#
-
-
 
 
 #==============================================================================#
@@ -386,102 +316,69 @@ short_rational_test( h, x, ratio )
 #==============================================================================#
 
 function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::AbstractVector{T}, decimation::Integer, dlyLine::AbstractVector{T} = T[]; xStartIdx = 1 )
-    # println()
-    # println( "    decimate!")
-    # println( "        dlyLine = $(dlyLine.')")
-    # println( "        x       = $(x.')")
-    
-    
-    
-    # xLen        = length( x )
-    xLen          = length( x ) - xStartIdx + 1 
-    # println( "        xLen = $xLen" )
-    hLen          = length( h )
-    dlyLineLen    = length( dlyLine )
-    reqDlyLineLen = hLen-1
-    outLen        = int( ceil( xLen / decimation ))
-    # println( "    outLen = $outLen = int( ceil( $xLen / $decimation ))")
-    criticalYidx  = min( int(ceil(hLen / decimation)), outLen )              # The maxximum index of y where our h*x would would rech out of bounds
-    xIdx          = 1
-    xOffset       = xStartIdx - 1
-    # println( "        xStartIdx = $xStartIdx" )
-    
-    
-    1 <= xStartIdx <= length( x ) || error( "    xStartIdx must be >= 1 and =< length( x ) ")
-    length( buffer ) >= outLen || error( "    length(buffer) must be >= floor( length(x) / decimation)" )
 
-    if dlyLineLen != reqDlyLineLen                                      # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
-        if dlyLineLen == 0
+    xOffset       = xStartIdx - 1
+    xLen          = length( x ) - xOffset
+    hLen          = length( h )
+    reqDlyLineLen = hLen-1
+    dlyLineLen    = length( dlyLine )
+    outLen        = int( ceil( xLen / decimation ))
+    criticalYidx  = min( int(ceil(hLen / decimation)), outLen )
+
+    1 <= xStartIdx <= length( x ) || error( "xStartIdx must be >= 1 and =< length( x ) " )
+    length( buffer ) >= outLen    || error( "length(buffer) must be >= floor( length(x) / decimation)" )
+
+    if dlyLineLen != reqDlyLineLen                              
+        if dlyLineLen == 0               
             dlyLine = zeros( T, reqDlyLineLen )
         elseif dlyLineLen < reqDlyLineLen
-            dlyLine = [ zeros( T, reqDlyLineLen - dlyLineLen ), dlyLine ]
+            dlyLine = [ zeros( T, reqDlyLineLen - dlyLineLen ), dlyLine ] # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros 
         else
             dlyLine = dlyLine[ end+1-reqDlyLineLen:end ]
         end
         dlyLineLen = length( dlyLine )
     end
-    
-    
-    
-    h = flipud(h)                                                   # TODO: figure out a way to not always have to flip taps each time
-    
-    # println( "         for yIdx = 1:$criticalYidx" )
-    for yIdx = 1:criticalYidx
-        
-        hIdx        = 1
-        accumulator = zero(T)
-        
-        # print( "            y[$yIdx] = ")
-        
-        for dlyLineIdx = xIdx:dlyLineLen                                # this loop takes care of previous dlyLine
-            # print( " ( h[$hIdx] * $(dlyLine[dlyLineIdx]) ) " )
-            accumulator += h[hIdx] * dlyLine[dlyLineIdx]
-            hIdx += 1
-        end
-        
-        for k = 1:xIdx
-            # print( " [ h[$hIdx] * $(x[k+xOffset]) ] " )
-            accumulator += h[ hIdx ] * x[ k + xOffset ]
-            hIdx += 1
-        end
-        
 
-        buffer[yIdx] = accumulator
-        
-        
-        
-        # println()
-        xIdx += decimation
-    end
-
-    xIdx -= hLen
-
-    # println( "         for yIdx = $(criticalYidx+1):$outLen" )
-    for yIdx = criticalYidx+1:outLen
-
+    h = flipud(h)                                                         # TODO: figure out a way to not always have to flip taps each time                           
+    inputIdx = 1                                                          # inputIdx is is the current input, not the actual index of of the current x in the delay line
+    for yIdx in 1:criticalYidx                                            # Filtering is broken up into two outer loops                      
+                                                                          # This first loop takes care of filter ramp up.
+        hIdx        = 1       
+        accumulator = zero(T) 
+                              
+        for dlyLineIdx in inputIdx:dlyLineLen                             #     Inner Loop 1: Handles convolution of taps and delay line    
+            accumulator += h[hIdx] * dlyLine[dlyLineIdx]    
+            hIdx += 1                                       
+        end                                                 
+                                                            
+        for k in 1:inputIdx                                               #     Inner Loop 2: handles convolution of taps and x
+            accumulator += h[ hIdx ] * x[ k + xOffset ]                   
+            hIdx += 1                                                     
+        end                                                               
+                                                                          
+        buffer[yIdx] = accumulator                                        
+        inputIdx += decimation                                                
+    end                                                                   
+                                                                          
+    inputIdx -= hLen                                                          
+                                                                          
+    for yIdx in criticalYidx+1:outLen                                      # second outer loop, we are now in the clear to to convolve without x[inputIdx-]
         accumulator  = zero(T)
-
-        # print( "            y[$yIdx] = ")
-
-        for k = 1:hLen
-            accumulator += h[ k ] * x[ xIdx+k+xOffset ]
-            # print( " < h[$k] * $(x[xIdx+k]) > " )            
+        
+        for k in 1:hLen
+            accumulator += h[ k ] * x[ inputIdx + k + xOffset ]
         end
-        
-        # println()
-        
+
         buffer[yIdx] = accumulator
-        xIdx += decimation
+        inputIdx += decimation
     end
     
-    xIdx += hLen - decimation
-    
-    xLeftoverLen = max( xLen - xIdx, 0 )
-    
-    # println( "    xLeftoverLen = $xLeftoverLen = max( $xLen - $xIdx, 0 )" )
+    inputIdx += hLen - decimation    
+    xLeftoverLen = max( xLen - inputIdx, 0 )
 
     return buffer, xLeftoverLen
 end
+
 
 function decimate{T}( h::Vector{T}, x::AbstractVector{T}, decimation::Integer, dlyLine::Vector{T} = T[]; xStartIdx = 1 )
     xLen   = length( x ) - xStartIdx + 1
@@ -498,92 +395,18 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     reqDlyLineLen = self.reqDlyLineLen
     combinedLen   = dlyLineLen + xLen
     y             = T[]
-    # println()
-    # println()
-    # println( "filt" )
-    # println( "xLen = $(length(x)), x = $(x.') ")
-    # println( "dlyLineLen = $dlyLineLen,  dlyLine = $(self.dlyLine.') ")
+
     if combinedLen > reqDlyLineLen        
         xStartIdx         = reqDlyLineLen - dlyLineLen + 1
         self.dlyLine      = [ dlyLine, x[1:xStartIdx-1] ]
-        # println( "  dlyLineLen = $(length(self.dlyLine)), dlyLine = $(self.dlyLine.') ")        
-        (y, xLeftoverLen) = decimate( h, x, decimation, self.dlyLine; xStartIdx = xStartIdx )
-        
-        nextDlyLineLen = reqDlyLineLen - decimation + 1 + xLeftoverLen        
-        self.dlyLine   = [ self.dlyLine, x[xStartIdx:end] ][end-nextDlyLineLen+1:end]                        
-        # println( "  dlyLineLen = $(length(self.dlyLine)), dlyLine = $(self.dlyLine.') ")        
+        (y, xLeftoverLen) = decimate( h, x, decimation, self.dlyLine; xStartIdx = xStartIdx )        
+        nextDlyLineLen    = reqDlyLineLen - decimation + 1 + xLeftoverLen        
+        self.dlyLine      = [ self.dlyLine, x[xStartIdx:end] ][end-nextDlyLineLen+1:end]                        
     else
         append!( dlyLine, x )
     end        
     
-    # println( "    return $(y.')")
-    
     return y
 end
 
-
-function short_decimate_test( h, x, factor, step )
-    xLen = length(x)
-    # @printf( "\nRadio's decimation\n\t")
-    # @time nativeResult = decimate( h, x, factor )
-    # display( nativeResult )
-    #
-    # self = FIRFilter( h, 1//factor )
-    # @printf( "\nDlyLineful decimation\n\t")
-    # @time begin
-    #     y1   = filt( self, x[1:8])
-    #     y2   = filt( self, x[9:100] )
-    # end
-    # dlyLinefulResult = [y1, y2]
-    # display( dlyLinefulResult )
-    #
-    # @printf( "\nNaive resampling\n\t")
-    # @time begin
-        baseResult = Base.filt( h, one(x[1]), x )[1:factor:end]
-    # end
-    # display( baseResult )
-    #
-    # areApprox( dlyLinefulResult, baseResult ) & areApprox( nativeResult, baseResult ) ? println( "Tests passed" ) : println( "1 or more tests failed")
-    self      = FIRFilter( h, 1//factor )
-    incrementalResult = similar(x, 0)
-    for i in 1:step:xLen
-        xNext = [ i : min(i+step-1, xLen) ]
-        append!( incrementalResult, filt( self, xNext ) )
-        # println( "incrementalResult = $(incrementalResult.') ")
-    end
-    # println()
-    # println()
-    
-    # minLen = min( length(baseResult), length( incrementalResult ) )
-    
-    # println( "baseResult   = $(baseResult.')" )
-    # println( "nativeResult = $(incrementalResult.')" )
-    
-    display( [ baseResult incrementalResult ])
-    
-    passed = areApprox( baseResult, incrementalResult )
-    # println( "Passed = $passed" )
-
-    return passed
-end
-
 end # module
-
-import Multirate
-
-h      = [1:10];
-x      = [1:26];
-factor = 5;
-
-
-testPassed = falses( length(x) )
-for chunkSize = 1:length(x)
-    thisTestPassed = Multirate.short_decimate_test( h, x, factor, chunkSize )
-    testPassed[chunkSize] = thisTestPassed || error()
-end
-
-display( testPassed )
-#===================================
-
-self   = Multirate.FIRFilter( h, 1//factor ); Multirate.filt(self, x)
-===================================#
