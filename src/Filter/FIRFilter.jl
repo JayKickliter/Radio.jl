@@ -346,12 +346,12 @@ function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::Abstr
         hIdx        = 1       
         accumulator = zero(T) 
                               
-        for dlyLineIdx in inputIdx:dlyLineLen                             #     Inner Loop 1: Handles convolution of taps and delay line    
+        for dlyLineIdx in inputIdx:dlyLineLen                             # Inner Loop 1: Handles convolution of taps and delay line    
             accumulator += h[hIdx] * dlyLine[dlyLineIdx]    
             hIdx += 1                                       
         end                                                 
                                                             
-        for k in 1:inputIdx                                               #     Inner Loop 2: handles convolution of taps and x
+        for k in 1:inputIdx                                               # Inner Loop 2: handles convolution of taps and x
             accumulator += h[ hIdx ] * x[ k + xOffset ]                   
             hIdx += 1                                                     
         end                                                               
@@ -362,7 +362,7 @@ function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::Abstr
                                                                           
     inputIdx -= hLen                                                          
                                                                           
-    for yIdx in criticalYidx+1:outLen                                      # second outer loop, we are now in the clear to to convolve without x[inputIdx-]
+    for yIdx in criticalYidx+1:outLen                                     # second outer loop, we are now in the clear to to convolve without x[inputIdx-]
         accumulator  = zero(T)
         
         for k in 1:hLen
