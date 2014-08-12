@@ -1,3 +1,7 @@
+module Multirate
+
+import Main: areApprox
+
 #==============================================================================#
 #                                    Types                                     #
 #==============================================================================#
@@ -381,15 +385,30 @@ short_rational_test( h, x, ratio )
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] )
+function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::AbstractVector{T}, decimation::Integer, dlyLine::AbstractVector{T} = T[]; xStartIdx = 1 )
+    println()
+    println( "    decimate!")
+    println( "        dlyLine = $(dlyLine.')")
+    println( "        x       = $(x.')")
     
-    xLen          = length( x )
+    
+    
+    # xLen        = length( x )
+    xLen          = length( x ) - xStartIdx + 1 
+    println( "        xLen = $xLen" )
     hLen          = length( h )
     dlyLineLen    = length( dlyLine )
     reqDlyLineLen = hLen-1
     outLen        = int( ceil( xLen / decimation ))
- 
-    length( buffer ) >= outLen || error( "length(buffer) must be >= floor( length(x) / decimation)" )
+    println( "    outLen = $outLen = int( ceil( $xLen / $decimation ))")
+    criticalYidx  = min( int(ceil(hLen / decimation)), outLen )              # The maxximum index of y where our h*x would would rech out of bounds
+    xIdx          = 1
+    xOffset       = xStartIdx - 1
+    println( "        xStartIdx = $xStartIdx" )
+    
+    
+    1 <= xStartIdx <= length( x ) || error( "    xStartIdx must be >= 1 and =< length( x ) ")
+    length( buffer ) >= outLen || error( "    length(buffer) must be >= floor( length(x) / decimation)" )
 
     if dlyLineLen != reqDlyLineLen                                      # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
         if dlyLineLen == 0
@@ -402,27 +421,36 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
         dlyLineLen = length( dlyLine )
     end
     
-    criticalYidx = min(int(ceil(hLen / decimation)), outLen)              # The maxximum index of y where our h*x would would rech out of bounds
-    xIdx         = 1
+    
     
     h = flipud(h)                                                   # TODO: figure out a way to not always have to flip taps each time
-
+    
+    println( "         for yIdx = 1:$criticalYidx" )
     for yIdx = 1:criticalYidx
         
         hIdx        = 1
         accumulator = zero(T)
-
+        
+        print( "            y[$yIdx] = ")
+        
         for dlyLineIdx = xIdx:dlyLineLen                                # this loop takes care of previous dlyLine
+            print( "     ( h[$hIdx] * $(dlyLine[dlyLineIdx]) ) " )
             accumulator += h[hIdx] * dlyLine[dlyLineIdx]
             hIdx += 1
         end
         
         for k = 1:xIdx
-            accumulator += h[ hIdx ] * x[ k ]
+            print( "     [ h[$hIdx] * $(x[k+xOffset]) ] " )
+            accumulator += h[ hIdx ] * x[ k + xOffset ]
             hIdx += 1
         end
+        
 
         buffer[yIdx] = accumulator
+        
+        
+        
+        println()
         xIdx += decimation
     end
 
@@ -434,6 +462,7 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
 
         for k = 1:hLen
             accumulator += h[ k ] * x[ xIdx+k ]
+            print( "        < h[$k] * $(x[xIdx+k]) > " )            
         end
 
         buffer[yIdx] = accumulator
@@ -443,14 +472,16 @@ function decimate!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, decimation
     xIdx += hLen - decimation
     
     xLeftoverLen = max( xLen - xIdx, 0 )
+    
+    println( "    xLeftoverLen = $xLeftoverLen = max( $xLen - $xIdx, 0 )" )
 
     return buffer, xLeftoverLen
 end
 
-function decimate{T}( h::Vector{T}, x::Vector{T}, decimation::Integer, dlyLine::Vector{T} = T[] )
-    xLen   = length( x )
-    buffer = similar(x, int(ceil( xLen / decimation )) )
-    decimate!( buffer, h, x, decimation, dlyLine )    
+function decimate{T}( h::Vector{T}, x::AbstractVector{T}, decimation::Integer, dlyLine::Vector{T} = T[]; xStartIdx = 1 )
+    xLen   = length( x ) - xStartIdx + 1
+    buffer = similar( x, int(ceil( xLen / decimation )) )
+    decimate!( buffer, h, x, decimation, dlyLine, xStartIdx = xStartIdx )    
 end
 
 function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
@@ -462,19 +493,26 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     reqDlyLineLen = self.reqDlyLineLen
     combinedLen   = dlyLineLen + xLen
     y             = T[]
-    
+    println()
+    println()
+    println( "filt" )
+    println( "xLen = $(length(x)), x = $(x.') ")
+    println( "dlyLineLen = $dlyLineLen,  dlyLine = $(self.dlyLine.') ")
     if combinedLen > reqDlyLineLen        
-
-        self.dlyLine      = [ dlyLine, x ][1:reqDlyLineLen]
-        x                 = [ dlyLine, x ][reqDlyLineLen+1:end]        
-        (y, xLeftoverLen) = decimate( h, x, decimation, self.dlyLine )
+        xStartIdx         = reqDlyLineLen - dlyLineLen + 1
+        self.dlyLine      = [ dlyLine, x[1:xStartIdx-1] ]
+        println( "  dlyLineLen = $(length(self.dlyLine)), dlyLine = $(self.dlyLine.') ")        
+        (y, xLeftoverLen) = decimate( h, x, decimation, self.dlyLine; xStartIdx = xStartIdx )
         
         nextDlyLineLen = reqDlyLineLen - decimation + 1 + xLeftoverLen        
-        self.dlyLine   = [ self.dlyLine, x ][end-nextDlyLineLen+1:end]                        
+        self.dlyLine   = [ self.dlyLine, x[xStartIdx:end] ][end-nextDlyLineLen+1:end]                        
+        println( "  dlyLineLen = $(length(self.dlyLine)), dlyLine = $(self.dlyLine.') ")        
     else
         append!( dlyLine, x )
     end        
-
+    
+    println( "    return $(y.')")
+    
     return y
 end
 
@@ -502,31 +540,44 @@ function short_decimate_test( h, x, factor, step )
     #
     # areApprox( dlyLinefulResult, baseResult ) & areApprox( nativeResult, baseResult ) ? println( "Tests passed" ) : println( "1 or more tests failed")
     self      = FIRFilter( h, 1//factor )
-    incResult = similar(x, 0)
+    incrementalResult = similar(x, 0)
     for i in 1:step:xLen
         xNext = [ i : min(i+step-1, xLen) ]
-        append!( incResult, filt( self, xNext ) )
-        println( "incResult = $(incResult.') ")
+        append!( incrementalResult, filt( self, xNext ) )
+        # println( "incrementalResult = $(incrementalResult.') ")
     end
     println()
     println()
     
-    minLen = min( length(baseResult), length( incResult ) )
-    display( [ baseResult[1:minLen] incResult[1:minLen] ] )
+    # minLen = min( length(baseResult), length( incrementalResult ) )
     
-    passed = areApprox( baseResult, incResult )
+    # println( "baseResult   = $(baseResult.')" )
+    # println( "nativeResult = $(incrementalResult.')" )
+    
+    display( [ baseResult incrementalResult ])
+    
+    passed = areApprox( baseResult, incrementalResult )
     println( "Passed = $passed" )
+
+    return passed
 end
 
+end # module
 
-h      = [1:360];
+import Multirate
+
+h      = [1:10];
 x      = [1:25];
 factor = 5;
 
+
+testPassed = falses( length(x) )
+for chunkSize = 1:length(x)
+    testPassed[chunkSize] = Multirate.short_decimate_test( h, x, factor, chunkSize )
+end
+
+display( testPassed )
 #===================================
 
-short_decimate_test( h, x, factor, 2 )
-
-self   = FIRFilter( h, 1//factor ); filt(self, x)
-
+self   = Multirate.FIRFilter( h, 1//factor ); Multirate.filt(self, x)
 ===================================#
