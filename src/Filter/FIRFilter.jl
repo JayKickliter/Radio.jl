@@ -434,13 +434,13 @@ function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::Abstr
         print( "            y[$yIdx] = ")
         
         for dlyLineIdx = xIdx:dlyLineLen                                # this loop takes care of previous dlyLine
-            print( "     ( h[$hIdx] * $(dlyLine[dlyLineIdx]) ) " )
+            print( " ( h[$hIdx] * $(dlyLine[dlyLineIdx]) ) " )
             accumulator += h[hIdx] * dlyLine[dlyLineIdx]
             hIdx += 1
         end
         
         for k = 1:xIdx
-            print( "     [ h[$hIdx] * $(x[k+xOffset]) ] " )
+            print( " [ h[$hIdx] * $(x[k+xOffset]) ] " )
             accumulator += h[ hIdx ] * x[ k + xOffset ]
             hIdx += 1
         end
@@ -456,15 +456,20 @@ function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::Abstr
 
     xIdx -= hLen
 
+    println( "         for yIdx = $(criticalYidx+1):$outLen" )
     for yIdx = criticalYidx+1:outLen
 
         accumulator  = zero(T)
 
-        for k = 1:hLen
-            accumulator += h[ k ] * x[ xIdx+k ]
-            print( "        < h[$k] * $(x[xIdx+k]) > " )            
-        end
+        print( "            y[$yIdx] = ")
 
+        for k = 1:hLen
+            accumulator += h[ k ] * x[ xIdx+k+xOffset ]
+            print( " < h[$k] * $(x[xIdx+k]) > " )            
+        end
+        
+        println()
+        
         buffer[yIdx] = accumulator
         xIdx += decimation
     end
@@ -567,13 +572,14 @@ end # module
 import Multirate
 
 h      = [1:10];
-x      = [1:25];
+x      = [1:26];
 factor = 5;
 
 
 testPassed = falses( length(x) )
 for chunkSize = 1:length(x)
-    testPassed[chunkSize] = Multirate.short_decimate_test( h, x, factor, chunkSize )
+    thisTestPassed = Multirate.short_decimate_test( h, x, factor, chunkSize )
+    testPassed[chunkSize] = thisTestPassed || error()
 end
 
 display( testPassed )
