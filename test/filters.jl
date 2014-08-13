@@ -12,15 +12,16 @@ using Multirate
 #==============================================================================#
 
 function short_singlerate_test( h, x, dlyLine )
+    println( "Testing single rate")
     
-    @printf( "Radio's Single-rate filt\n\t")
+    @printf( "\tRadio's Single-rate filt\n\t")
     @time nativeResult = filt( h, x, dlyLine )
     
     self = FIRFilter( h )    
-    @printf( "Stateful Single-rate filt\n\t")
+    @printf( "\tStateful Single-rate filt\n\t")
     @time y = append!( filt( self, x[1:250] ) , filt( self, x[251:end] ) )
 
-    @printf( "Base Single-rate filt\n\t")
+    @printf( "\tBase Single-rate filt\n\t")
     @time baseResult   = Base.filt( h, 1.0, x )
 
 
@@ -49,7 +50,6 @@ function test_decimate{Th, Tx}( ::Type{Th}, ::Type{Tx}, hLen, xLen, factor )
     h = rand( Th, hLen )
     x = rand( Tx, xLen )
     
-
     nativeResult = decimate( h, x, factor )
     baseResult   = Base.filt( h, one(Th), x )
     baseResult   = baseResult[1:factor:end]
