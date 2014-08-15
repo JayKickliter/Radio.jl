@@ -2,7 +2,7 @@ module Multirate
 
 export  FIRFilter,      polyize,
         filt!,          filt,
-        decimate!,      decimate,        
+        decimate!,      decimate,
         interpolate!,   interpolate,
         resample!,      resample
 
@@ -21,7 +21,7 @@ end
 # Interpolator FIR kernel
 type FIRInterpolator <: FIRKernel
     PFB::Matrix
-    interploation::Int
+    interpolation::Int
 end
 
 # Decimator FIR kernel
@@ -43,25 +43,24 @@ type FIRFilter{Tk<:FIRKernel} <: Filter
     reqDlyLineLen::Int
 end
 
-function FIRFilter( h::Vector, resampleRatio::Rational = 1 // 1 )
-
+function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     interploation = num( resampleRatio )
     decimation    = den( resampleRatio )
     reqDlyLineLen = 0
-    
-    if resampleRatio == 1
-        reqDlyLineLen = length( h - 1 )
+
+    if resampleRatio == 1                                     # single-rate
+        reqDlyLineLen = length( h ) - 1
         kernel        = FIRStandard( h )
-    elseif interploation == 1
-        reqDlyLineLen = max( decimation-1, length(h)-1 ) 
+    elseif interploation == 1                                 # decimate
+        reqDlyLineLen = max( decimation-1, length(h)-1 )
         kernel        = FIRDecimator( h, decimation )
-    elseif decimation == 1
+    elseif decimation == 1                                    # interpolate
         PFB           = polyize( h, interploation )
-        reqDlyLineLen = size(PFB)[1] - 1                   # TODO: this is a placeholder, needs to be figured out before stateful version can work
-        kernel        = FIRInterpolator( PFB, interploation )
-    else
+        reqDlyLineLen = size( PFB )[1] - 1
+        kernel        = FIRInterpolator( PFB, interploation ) # TODO: this is a placeholder, needs to be figured out before stateful version can work
+    else                                                      # rational
         PFB           = polyize( h, interploation )
-        reqDlyLineLen = size(PFB)[1] - 1                   # TODO: this is a placeholder, needs to be figured out before stateful version can work
+        reqDlyLineLen = size(PFB)[1] - 1                      # TODO: this is a placeholder, needs to be figured out before stateful version can work
         kernel        = FIRRational( PFB, interploation, decimation )
     end
 
@@ -121,7 +120,7 @@ end
 #               ___] | | \| |__] |___ |___    |  \ |  |  |  |___               #
 #==============================================================================#
 
-function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vector{T} = T[]; xStartIdx = 1 )
+function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vector{T} = T[] )
 
     bufLen        = length( buffer )
     xLen          = length( x )
@@ -131,7 +130,7 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vecto
 
     bufLen >= xLen || error( "buffer length must be >= x length" )
 
-    if dlyLineLen != reqDlyLineLen          
+    if dlyLineLen != reqDlyLineLen
         if dlyLineLen == 0
             dlyLine = zeros( T, reqDlyLineLen )
         elseif dlyLineLen < reqDlyLineLen
@@ -200,48 +199,84 @@ end
 #               | | \|  |  |___ |  \ |    |___ |__| |  |  |  |___              #
 #==============================================================================#
 
-function interpolate!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T}; xStartIdx = 1 )
-    (hLen, Nφ)  = size( PFB )      # each column is a phase of the PFB, the rows hold the individual h
-    xLen        = length( x )      # number of input items
-    bufLen      = length( buffer )
+function interpolate!{T}( buffer::AbstractVector{T}, PFB::AbstractArray{T, 2}, x::AbstractVector{T}, dlyLine::AbstractVector{T} = T[] )
 
-    bufLen >= xLen*Nφ || error( "buffer length must be >= signal length")
+    (φLen, Nφ)    = size( PFB )                                                    # each column is a phase of the PFB, the rows hold the individual h
+    xLen          = length( x )                                                    # number of input items
+    bufLen        = length( buffer )
+    reqDlyLineLen = φLen - 1
+    dlyLineLen    = length( dlyLine )
+    outLen        = xLen * Nφ
+    criticalYidx  = min( reqDlyLineLen*Nφ, outLen )
 
-    yIdx = 1
+    bufLen >= outLen || error( "length( buffer ) must be >= interpolation * length(x)")
 
-    for xIdx in 1:hLen-1, φ = 1:Nφ  # until xIdx == hLen, x[xIdx-m+1] would reach out of bounds
-        accumulator = zero(T)      # this first loop limits xIdx-m+1 to a minimum of 1
-        for Tn in 1:xIdx            # for each tap in phase[n]
-            @inbounds accumulator += PFB[Tn, φ] * x[xIdx-Tn+1]
+    if dlyLineLen != reqDlyLineLen
+        if dlyLineLen == 0
+            dlyLine = zeros( T, reqDlyLineLen )
+        elseif dlyLineLen < reqDlyLineLen
+            dlyLine = prepend!( dlyLine, zeros(  T, reqDlyLineLen - dlyLineLen ) ) # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
+        else
+            dlyLine = dlyLine[ end+1-reqDlyLineLen:end ]
         end
-        buffer[yIdx] = accumulator
-        yIdx += 1
+        dlyLineLen = length( dlyLine )
     end
 
-    PFB = flipud(PFB)
+    PFB      = flipud(PFB)
+    inputIdx = 1
+    φ        = 1
 
-    for xIdx in hLen:xLen, φ = 1:Nφ # no longer in danger of stepping out of bounds
+    for yIdx in 1:criticalYidx
 
-        xStartIdx   = xIdx-hLen
-        yIdx        = Nφ*(xIdx-1)+φ
         accumulator = zero(T)
 
-        @simd for Tn in 1:hLen
-            @inbounds accumulator += PFB[Tn, φ] * x[xStartIdx + Tn]
+        for k in 1:φLen-inputIdx
+            @inbounds accumulator += PFB[k, φ] * dlyLine[k+inputIdx-1]
         end
 
-        buffer[yIdx] = accumulator
-        yIdx += 1
+        for k in 1:inputIdx
+            @inbounds accumulator += PFB[φLen-inputIdx+k, φ] * x[k]
+        end
+
+        @inbounds buffer[yIdx]  = accumulator
+        (φ, inputIdx) = φ == Nφ ? ( 1, inputIdx+1 ) : ( φ+1, inputIdx )
+    end
+
+    for yIdx in criticalYidx+1:outLen
+
+        accumulator = zero(T)
+
+        for k in 1:φLen
+            @inbounds accumulator += PFB[ k, φ ] * x[ inputIdx - φLen + k ]
+        end
+
+        @inbounds buffer[yIdx]  = accumulator
+        (φ, inputIdx) = φ == Nφ ? ( 1, inputIdx+1 ) : ( φ+1, inputIdx )
     end
 
     return buffer
 end
 
-interpolate{T}( PFB::Array{T, 2}, x::Vector{T} ) = interpolate!( similar( x, length(x)*size(PFB)[2] ), PFB, x )
-interpolate( h, x, interpolation )               = interpolate( polyize( h, interpolation ), x )
+interpolate{T}( PFB::Array{T, 2}, x::Vector{T}, dlyLine::AbstractVector{T} = T[] ) = interpolate!( similar( x, length(x)*size(PFB)[2] ), PFB, x, dlyLine )
+interpolate( h, x, interpolation, dlyLine = eltype(x)[] )                          = interpolate( polyize( h, interpolation ), x, dlyLine )
 
 function filt( self::FIRFilter{FIRInterpolator}, x )
    interpolate( self.kernel.PFB, x )
+end
+
+function filt( self::FIRFilter{FIRInterpolator}, x::AbstractVector )
+    xLen          = length( x )
+    interpolation = self.kernel.interpolation
+    reqDlyLineLen = self.reqDlyLineLen
+    
+    y = interpolate( self.kernel.PFB, x, self.dlyLine )
+    
+    if xLen >= reqDlyLineLen
+        self.dlyLine = x[ end-reqDlyLineLen+1 : end ]
+    else
+        self.dlyLine = [ self.dlyLine, x ][end-reqDlyLineLen+1:end]
+    end
+    return y
 end
 
 
@@ -291,6 +326,7 @@ resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h
 
 
 
+
 #==============================================================================#
 #                      ___  ____ ____ _ _  _ ____ ___ ____                     #
 #                      |  \ |___ |    | |\/| |__|  |  |___                     #
@@ -310,43 +346,43 @@ function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::Abstr
     1 <= xStartIdx <= length( x ) || error( "xStartIdx must be >= 1 and =< length( x ) " )
     length( buffer ) >= outLen    || error( "length(buffer) must be >= floor( ( length(x) ) / decimation)" )
 
-    if dlyLineLen != reqDlyLineLen                              
-        if dlyLineLen == 0               
+    if dlyLineLen != reqDlyLineLen
+        if dlyLineLen == 0
             dlyLine = zeros( T, reqDlyLineLen )
         elseif dlyLineLen < reqDlyLineLen
-            dlyLine = [ zeros( T, reqDlyLineLen - dlyLineLen ), dlyLine ] # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros 
+            dlyLine = prepend!( dlyLine, zeros(  T, reqDlyLineLen - dlyLineLen ) ) # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
         else
             dlyLine = dlyLine[ end+1-reqDlyLineLen:end ]
         end
         dlyLineLen = length( dlyLine )
     end
 
-    h = flipud(h)                                                         # TODO: figure out a way to not always have to flip taps each time                           
+    h = flipud(h)                                                         # TODO: figure out a way to not always have to flip taps each time
     inputIdx = 1                                                          # inputIdx is is the current input, not the actual index of of the current x in the delay line
-    for yIdx in 1:criticalYidx                                            # Filtering is broken up into two outer loops                      
+    for yIdx in 1:criticalYidx                                            # Filtering is broken up into two outer loops
                                                                           # This first loop takes care of filter ramp up.
-        hIdx        = 1       
-        accumulator = zero(T) 
-                              
-        for dlyLineIdx in inputIdx:dlyLineLen                             # Inner Loop 1: Handles convolution of taps and delay line    
-            accumulator += h[hIdx] * dlyLine[dlyLineIdx]    
-            hIdx += 1                                       
-        end                                                 
-                                                            
+        hIdx        = 1
+        accumulator = zero(T)
+
+        for dlyLineIdx in inputIdx:dlyLineLen                             # Inner Loop 1: Handles convolution of taps and delay line
+            accumulator += h[hIdx] * dlyLine[dlyLineIdx]
+            hIdx += 1
+        end
+
         for k in 1:inputIdx                                               # Inner Loop 2: handles convolution of taps and x
-            accumulator += h[ hIdx ] * x[ k + xOffset ]                   
-            hIdx += 1                                                     
-        end                                                               
-                                                                          
-        buffer[yIdx] = accumulator                                        
-        inputIdx += decimation                                                
-    end                                                                   
-                                                                          
-    inputIdx -= hLen                                                          
-                                                                          
+            accumulator += h[ hIdx ] * x[ k + xOffset ]
+            hIdx += 1
+        end
+
+        buffer[yIdx] = accumulator
+        inputIdx += decimation
+    end
+
+    inputIdx -= hLen
+
     for yIdx in criticalYidx+1:outLen                                     # second outer loop, we are now in the clear to to convolve without x[inputIdx-]
         accumulator  = zero(T)
-        
+
         for k in 1:hLen
             accumulator += h[ k ] * x[ inputIdx + k + xOffset ]
         end
@@ -354,18 +390,18 @@ function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::Abstr
         buffer[yIdx] = accumulator
         inputIdx += decimation
     end
-    
-    inputIdx += hLen - decimation    
+
+    inputIdx += hLen - decimation
     xLeftoverLen = max( xLen - inputIdx, 0 )
 
-    return buffer, xLeftoverLen
+    return buffer, xLeftoverLen                                           # TODO: return number of elements written to buffer
 end
 
 
 function decimate{T}( h::Vector{T}, x::AbstractVector{T}, decimation::Integer, dlyLine::Vector{T} = T[]; xStartIdx = 1 )
     xLen   = length( x ) - xStartIdx + 1
     buffer = similar( x, int(ceil( xLen / decimation )) )
-    decimate!( buffer, h, x, decimation, dlyLine, xStartIdx = xStartIdx )    
+    decimate!( buffer, h, x, decimation, dlyLine, xStartIdx = xStartIdx )
 end
 
 function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
@@ -378,16 +414,16 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     combinedLen   = dlyLineLen + xLen
     y             = T[]
 
-    if combinedLen > reqDlyLineLen        
+    if combinedLen > reqDlyLineLen
         xStartIdx         = reqDlyLineLen - dlyLineLen + 1
         self.dlyLine      = [ dlyLine, x[1:xStartIdx-1] ]
-        (y, xLeftoverLen) = decimate( h, x, decimation, self.dlyLine; xStartIdx = xStartIdx )        
-        nextDlyLineLen    = reqDlyLineLen - decimation + 1 + xLeftoverLen        
-        self.dlyLine      = [ self.dlyLine, x[xStartIdx:end] ][end-nextDlyLineLen+1:end]                        
+        (y, xLeftoverLen) = decimate( h, x, decimation, self.dlyLine; xStartIdx = xStartIdx )
+        nextDlyLineLen    = reqDlyLineLen - decimation + 1 + xLeftoverLen
+        self.dlyLine      = [ self.dlyLine, x[xStartIdx:end] ][end-nextDlyLineLen+1:end]
     else
         append!( dlyLine, x )
-    end        
-    
+    end
+
     return y
 end
 

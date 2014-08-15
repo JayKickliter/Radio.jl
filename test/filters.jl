@@ -24,7 +24,7 @@ function short_singlerate_test( h, x, dlyLine )
     @printf( "\tBase Single-rate filt\n\t")
     @time baseResult   = Base.filt( h, 1.0, x )
 
-
+    display( [ baseResult nativeResult y ])
     areApprox( nativeResult, baseResult ) && areApprox( y, baseResult )    
 end
 
@@ -133,29 +133,43 @@ function test_interpolate{Th, Tx}( ::Type{Th}, ::Type{Tx}, hLen, xLen, factor )
     
     nativeResult = interpolate( h, x, factor )
     baseResult   = Base.filt( h, one(Th), xx )
+    
     areApprox( nativeResult, baseResult )
 end
 
 
 function short_interpolate_test( h, x, factor )    
-    @printf( "Radio's interpolate\n\t")
-    @time nativeResult = interpolate( h, x, factor )
+    @printf( "Radio's stateless interpolate\n\t")
+    @time statelessResult = interpolate( h, x, factor )
+    
+    @printf( "Radio's stateful interpolate\n\t")
+    self = FIRFilter( h, factor//1 )
+    x1   = x[ 1:int(floor(length(x)) * 0.25) ]
+    x2   = x[ length(x1)+1: end ]
+    @time begin
+        y1 = filt( self, x1 )
+        y2 = filt( self, x2 )
+    end    
+    statefulResult = append!( y1, y2 )
+    
     @printf( "Naive interpolate\n\t")
     @time begin
-        xx = zeros( length(x) * factor )
+        xx = zeros( eltype(x), length(x) * factor )
         for n = 0:length(x)-1;
             xx[ n*factor+1 ] = x[ n+1 ]
         end
-        baseResult = Base.filt( h, 1.0, xx )        
+        naiveResult = Base.filt( h, one(eltype(h)), xx )        
     end
-        
-    areApprox( nativeResult, baseResult )
+    
+    # display( [ naiveResult statelessResult statefulResult ] )
+    
+    areApprox( naiveResult, statelessResult ) & areApprox( naiveResult, statefulResult )
 end
 
 #=============================
-h = rand( 56 )
-x = rand( 1_000_000 )
-factor = 4
+h      = complex64(rand( 10 ));
+x      = rand( Complex64, 100_000 );
+factor = 4;
 
 short_interpolate_test( h, x, factor )
 =============================#
@@ -187,7 +201,7 @@ function short_rational_test( h, x, ratio )
         baseResult = [ baseResultInterpolated[n] for n = 1:downfactor:length( baseResultInterpolated ) ]
     end
     
-    [ baseResult nativeResult ]
+    display( [ baseResult nativeResult ] )
     areApprox( nativeResult, baseResult )
 end
 
