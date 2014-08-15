@@ -43,43 +43,32 @@ type FIRFilter{Tk<:FIRKernel} <: Filter
     reqDlyLineLen::Int
 end
 
-
-function FIRFilter{Tx}( ::Type{Tx}, h::Vector )
-    hLen     = length( h )
-    dlyLine  = zeros( Tx, hLen-1 )
-    kernel = FIRStandard( h )
-    FIRFilter( kernel, dlyLine, hLen-1 )
-end
-
-FIRFilter{Tt}( h::Vector{Tt} ) = FIRFilter( Tt, h )
-
-function FIRFilter{Tx}( ::Type{Tx}, h::Vector, resampleRatio::Rational )
+function FIRFilter( h::Vector, resampleRatio::Rational = 1 // 1 )
 
     interploation = num( resampleRatio )
     decimation    = den( resampleRatio )
     reqDlyLineLen = 0
     
     if resampleRatio == 1
-        return FIRFilter( Tx, h )
+        reqDlyLineLen = length( h - 1 )
+        kernel        = FIRStandard( h )
     elseif interploation == 1
-        PFB           = h
         reqDlyLineLen = max( decimation-1, length(h)-1 ) 
-        kernel        = FIRDecimator( PFB, decimation )
+        kernel        = FIRDecimator( h, decimation )
     elseif decimation == 1
-        PFB    = polyize( h, interploation )
-        kernel = FIRInterpolator( PFB, interploation, Tx[] )
+        PFB           = polyize( h, interploation )
+        reqDlyLineLen = size(PFB)[1] - 1                   # TODO: this is a placeholder, needs to be figured out before stateful version can work
+        kernel        = FIRInterpolator( PFB, interploation )
     else
-        PFB    = polyize( h, interploation )
-        kernel = FIRRational( PFB, interploation, decimation, Tx[] )
+        PFB           = polyize( h, interploation )
+        reqDlyLineLen = size(PFB)[1] - 1                   # TODO: this is a placeholder, needs to be figured out before stateful version can work
+        kernel        = FIRRational( PFB, interploation, decimation )
     end
 
-    hLen  = size(PFB)[1]
-    dlyLine = zeros( Tx, reqDlyLineLen )
+    dlyLine = zeros( eltype( h ), reqDlyLineLen )
 
     FIRFilter( kernel, dlyLine, reqDlyLineLen )
 end
-
-FIRFilter{Tt}( h::Vector{Tt}, resampleRatio::Rational ) = FIRFilter( Tt, h, resampleRatio )
 
 
 
