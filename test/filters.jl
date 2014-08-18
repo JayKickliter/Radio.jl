@@ -191,6 +191,7 @@ function short_rational_test( h, x, ratio )
     
     @printf( "Radio's stateless rational resampling\n\t")
     @time statelessResult = Multirate.resample!( buffer, PFB, x, upfactor//downfactor );
+    statelessResult = statelessResult[1]
     
     @printf( "Naive resampling\n\t")
     @time begin
@@ -215,8 +216,22 @@ function short_rational_test( h, x, ratio )
 end
 
 #=========================
-ratio = 1//1;
-h     = rand( 15 );
-x     = rand( int(100) );
+ratio = 3//5;
+h     = [1.0:15];  #rand( 15 );
+x     = [1.0:20]; #rand( int(100) );
 short_rational_test( h, x, ratio )
+
+
+self = Multirate.FIRFilter( h, ratio );
+yStateless = Multirate.filt( self, x )
+display( self.dlyLine.' )
+self = Multirate.FIRFilter( h, ratio );
+yStateful = Multirate.filt( self, x[1:1] );
+append!( yStateful, Multirate.filt( self, x[2:2] ));
+append!( yStateful, Multirate.filt( self, x[3:3] ));
+append!( yStateful, Multirate.filt( self, x[4:4] ));
+append!( yStateful, Multirate.filt( self, x[5:end] ));
+display( self.dlyLine.' )
+display([ yStateless yStateful ]);
+areApprox( yStateless, yStateful )
 =========================#
