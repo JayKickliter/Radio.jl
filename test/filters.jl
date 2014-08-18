@@ -184,9 +184,13 @@ short_interpolate_test( h, x, factor )
 function short_rational_test( h, x, ratio )
     upfactor   = num( ratio )
     downfactor = den( ratio )
+    PFB        = Multirate.polyize( h, upfactor )
+    xLen       = length( x )
+    bufLen     = int(ceil( xLen * ratio )) 
+    buffer     = similar( x, bufLen )
     
-    @printf( "Radio's rational resampling\n\t")
-    @time nativeResult = Multirate.resample( h, x, upfactor//downfactor );
+    @printf( "Radio's stateless rational resampling\n\t")
+    @time statelessResult = Multirate.resample!( buffer, PFB, x, upfactor//downfactor );
     
     @printf( "Naive resampling\n\t")
     @time begin
@@ -201,13 +205,18 @@ function short_rational_test( h, x, ratio )
         baseResult = [ baseResultInterpolated[n] for n = 1:downfactor:length( baseResultInterpolated ) ]
     end
     
-    display( [ baseResult nativeResult ] )
-    areApprox( nativeResult, baseResult )
+
+    if areApprox( statelessResult, baseResult )
+        return true
+    end
+    
+    display( [ baseResult statelessResult ] )
+    return false
 end
 
 #=========================
-ratio = 3//4;
+ratio = 1//1;
 h     = rand( 15 );
-x     = rand( int(100e3) );
+x     = rand( int(100) );
 short_rational_test( h, x, ratio )
 =========================#
