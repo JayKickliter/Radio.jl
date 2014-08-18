@@ -288,55 +288,49 @@ end
 #           |  \ |  |  |  .   |  \ |___ ___] |  | |  | |    |___ |___          #
 #==============================================================================#
 
-function resample!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T}, ratio::Rational, dlyLine = T[]; xStartIdx = 1 )
+function resample!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1 )
 
-    (φLen, Nφ)    = size( PFB ) # each column is a phase of the PFB, the rows hold the individual h
-    interpolation = num( ratio )
-    decimation    = den( ratio )
-    xOffset       = xStartIdx - 1
-    xLen          = length( x ) - xOffset
-    bufLen        = length( buffer )
-    outLen        = int(ceil( xLen * interpolation / decimation ))
-    criticalYidx  = int(floor( φLen * interpolation / decimation ))
-    criticalYidx  = min( criticalYidx, outLen )
+    (tapsPerφ, Nφ) = size( PFB )                                           
+    interpolation  = num( ratio )
+    decimation     = den( ratio )
+    xLen           = length( x ) - xStartIdx + 1
+    bufLen         = length( buffer )
+    outLen         = int(ceil( xLen * interpolation / decimation ))
+    criticalYidx   = int(floor( tapsPerφ * interpolation / decimation ))
+    criticalYidx   = min( criticalYidx, outLen )
 
-    outLen >= bufLen || error( "length( buffer ) must be >= int(ceil( xLen * interpolation / decimation ))")
+    1 <= xStartIdx <= length( x ) || error( "xStartIdx must be >= 1 and =< length( x ) " )
+    bufLen >= outLen              || error( "length( buffer ) must be >= int(ceil( xLen * interpolation / decimation ))")
 
     PFB = flipud( PFB )
     
     for yIdx in 1:criticalYidx
         φIdx               = mod( (yIdx-1)*decimation, interpolation ) + 1
-        inputIdx           = int( floor( (yIdx-1)*decimation / interpolation )) + 1
+        inputIdx           = int( floor( (yIdx-1)*decimation / interpolation )) + xStartIdx
         accumulator        = zero(T)
-        ( φStart, xFirstIdx ) = inputIdx < φLen ? ( φLen - inputIdx + 1, 1 ) : ( 1, inputIdx - φLen + 1  )
-
-        # println()
-        # println( "yIdx     = $yIdx; φIdx = $φIdx; inputIdx = $inputIdx")
-        # println( "y[$yIdx] = dot( PFB[$φStart:$φLen, $φIdx], x[$xFirstIdx:$inputIdx] )")
-        
-        @inbounds buffer[yIdx] = dot( PFB[φStart:end, φIdx], x[xFirstIdx:inputIdx] )
-        # for k in 1:inputIdx
-        #     accumulator += PFB[ end-inputIdx+k, φIdx ] * x[ k ]
-        # end
+                                        println(); println( "yIdx = $yIdx; φIdx = $φIdx; inputIdx = $inputIdx")
+        for k in 1:inputIdx             
+            @inbounds accumulator += PFB[ end-inputIdx+k, φIdx ] * x[ k ]
+        end
+        buffer[ yIdx ] = accumulator
     end
     
     for yIdx in criticalYidx+1:outLen
         φIdx        = mod( (yIdx-1)*decimation, interpolation ) + 1
-        inputIdx    = int( floor( (yIdx-1)*decimation / interpolation )) + 1
+        inputIdx    = int( floor( (yIdx-1)*decimation / interpolation )) + xStartIdx
         accumulator = zero(T)
-        xFirstIdx   = inputIdx-φLen # this is actually ones less than the input of our first, with k added below it is the actuall index
-
-        # println()
-        # println( "<yIdx     = $yIdx; φIdx = $φIdx; inputIdx = $inputIdx>")
-        # println( "<y[$yIdx] = dot( PFB[:, $φIdx], x[$xFirstIdx:$inputIdx] )>")
-        
-        for k in 1:φLen
+        xFirstIdx   = inputIdx-tapsPerφ # this is actually ones less than the input of our first, with k added below it is the actuall index
+                                        println(); println( "< yIdx = $yIdx; φIdx = $φIdx; inputIdx = $inputIdx >")
+        for k in 1:tapsPerφ
             @inbounds accumulator += PFB[k, φIdx] * x[ xFirstIdx + k ]
         end
         
         buffer[ yIdx ] = accumulator
-        # buffer[yIdx] = dot( PFB[:, φIdx], x[xFirstIdx:inputIdx] )
     end
+    
+    # TODO: figure out what the next inputIdx would be based off of th next yIdx.
+    #       then figure out how many input samples are missing and return a new delay line 
+    #       that is missing that number of samples
 
     return buffer
 end
