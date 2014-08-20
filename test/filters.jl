@@ -196,7 +196,7 @@ function short_rational_test( h, x, ratio )
     @printf( "Naive resampling\n\t")
     @time begin
         xx         = zeros( length(x) * upfactor );
-        baseResult = similar( x, int( length(x) * upfactor / downfactor ))
+        baseResult = similar( x, int( ceil( length(x) * ratio )))
         
         for n = 0:length(x)-1;
             xx[ n*upfactor+1 ] = x[ n+1 ];
@@ -206,31 +206,36 @@ function short_rational_test( h, x, ratio )
         baseResult = [ baseResultInterpolated[n] for n = 1:downfactor:length( baseResultInterpolated ) ]
     end
     
+    display( [ baseResult statelessResult ] )
 
     if areApprox( statelessResult, baseResult )
         return true
     end
-    
+
     display( [ baseResult statelessResult ] )
+    
     return false
 end
 
 #=========================
-ratio = 3//5;
+ratio = 4//3;
 h     = [1.0:15];  #rand( 15 );
-x     = [1.0:20]; #rand( int(100) );
+x     = [1.0:21]; #rand( int(100) );
 short_rational_test( h, x, ratio )
-
+ 
 
 self = Multirate.FIRFilter( h, ratio );
 yStateless = Multirate.filt( self, x )
-display( self.dlyLine.' )
+
 self = Multirate.FIRFilter( h, ratio );
-yStateful = Multirate.filt( self, x[1:1] );
-append!( yStateful, Multirate.filt( self, x[2:2] ));
-append!( yStateful, Multirate.filt( self, x[3:3] ));
-append!( yStateful, Multirate.filt( self, x[4:4] ));
-append!( yStateful, Multirate.filt( self, x[5:end] ));
+yStateful = similar( x, 0 )
+for i = 1:length(x)
+    y = Multirate.filt( self, x[i:i] )
+    append!( yStateful, y )
+end
+yStateful
+
+display( yStateful )
 display( self.dlyLine.' )
 display([ yStateless yStateful ]);
 areApprox( yStateless, yStateful )
