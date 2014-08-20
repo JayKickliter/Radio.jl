@@ -10,6 +10,8 @@ export  FIRFilter,      polyize,
 #                                    Types                                     #
 #==============================================================================#
 
+typealias FilterBank{T} AbstractMatrix{T}
+
 abstract Filter
 abstract FIRKernel
 
@@ -20,7 +22,7 @@ end
 
 # Interpolator FIR kernel
 type FIRInterpolator <: FIRKernel
-    PFB::Matrix
+    PFB::FilterBank
     interpolation::Int
 end
 
@@ -32,7 +34,7 @@ end
 
 # Rational resampler FIR kernel
 type FIRRational  <: FIRKernel
-    PFB::Matrix
+    PFB::FilterBank
     ratio::Rational
     φIdx::Int
 end
@@ -199,7 +201,7 @@ end
 #               | | \|  |  |___ |  \ |    |___ |__| |  |  |  |___              #
 #==============================================================================#
 
-function interpolate!{T}( buffer::AbstractVector{T}, PFB::AbstractArray{T, 2}, x::AbstractVector{T}, dlyLine::AbstractVector{T} = T[] )
+function interpolate!{T}( buffer::AbstractVector{T}, PFB::FilterBank{T}, x::AbstractVector{T}, dlyLine::AbstractVector{T} = T[] )
 
     (φLen, Nφ)    = size( PFB )                                                    # each column is a phase of the PFB, the rows hold the individual h
     xLen          = length( x )                                                    # number of input items
@@ -257,7 +259,7 @@ function interpolate!{T}( buffer::AbstractVector{T}, PFB::AbstractArray{T, 2}, x
     return buffer
 end
 
-interpolate{T}( PFB::Array{T, 2}, x::Vector{T}, dlyLine::AbstractVector{T} = T[] ) = interpolate!( similar( x, length(x)*size(PFB)[2] ), PFB, x, dlyLine )
+interpolate{T}( PFB::FilterBank{T}, x::Vector{T}, dlyLine::AbstractVector{T} = T[] ) = interpolate!( similar( x, length(x)*size(PFB)[2] ), PFB, x, dlyLine )
 interpolate( h, x, interpolation, dlyLine = eltype(x)[] )                          = interpolate( polyize( h, interpolation ), x, dlyLine )
 
 function filt( self::FIRFilter{FIRInterpolator}, x )
@@ -288,7 +290,7 @@ end
 #           |  \ |  |  |  .   |  \ |___ ___] |  | |  | |    |___ |___          #
 #==============================================================================#
 
-function resample!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
+function resample!{T}( buffer::Vector{T}, PFB::FilterBank{T}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
 
     (tapsPerφ, Nφ) = size( PFB )
     interpolation  = num( ratio )
@@ -304,29 +306,21 @@ function resample!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T}, ratio:
     dlyLine        = length( dlyLine ) == 0 ? zeros( T, reqDlyLineLen ) : dlyLine
     dlyLineLen     = length( dlyLine )
 
-    println()
-    println( "xStartIdx    = $xStartIdx")
-    println( "φIdxStepSize = $φIdxStepSize = mod( $decimation, $interpolation )" )
-    println( "criticalφIdx = $criticalφIdx = $Nφ - $φIdxStepSize" )
-    
-
     1 <= xStartIdx <= length( x ) || error( "xStartIdx must be >= 1 and =< length( x ) " )
     bufLen >= outLen              || error( "length( buffer ) must be >= int(ceil( xLen * interpolation / decimation ))")
     dlyLineLen == reqDlyLineLen   || error( "the optional parameter dlyLine, if provided, must a length of size(PFB)[1]-1")
 
     PFB = flipud( PFB )
 
-    yIdx         = 0                        # This will allow us to figure out the next state.
-    inputIdx     = 1                        # And how many more samples are needed before we can get another output.
+    yIdx         = 0                    # This will allow us to figure out the next state.
+    inputIdx     = 1                    # And how many more samples are needed before we can get another output.
     φIdxLast     = 0
     inputIdxLast = 0
 
     for yIdx in 1:criticalYidx
 
-        # inputIdx           = int( floor( (yIdx-1)*decimation / interpolation )) + 1
         accumulator        = zero(T)
 
-        println( "yIdx = $yIdx; φIdx = $φIdx; inputIdx + xOffset = $(inputIdx+xOffset); x[$(inputIdx+xOffset)] = $(x[(inputIdx+xOffset)])")
 
         for k in 1:tapsPerφ-inputIdx
             accumulator += PFB[ k, φIdx ] * dlyLine[ k+inputIdx-1]
@@ -336,8 +330,8 @@ function resample!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T}, ratio:
             @inbounds accumulator += PFB[ end-inputIdx+k, φIdx ] * x[ k+xOffset ]
         end
 
-        inputIdxLast = inputIdx
-        φIdxLast     = φIdx
+        inputIdxLast = inputIdx         # TODO: get rid of need to store last 
+        φIdxLast     = φIdx             # TODO: get rid of need to store last 
         inputIdx    += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
         φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize
 
@@ -346,30 +340,23 @@ function resample!{T}( buffer::Vector{T}, PFB::Array{T, 2}, x::Vector{T}, ratio:
 
     for yIdx in criticalYidx+1:outLen
 
-        # inputIdx    = int( floor( (yIdx-1)*decimation / interpolation )) + 1
         accumulator = zero(T)
         xFirstIdx   = inputIdx-tapsPerφ # this is actually ones less than the input of our first, with k added below it is the actuall index
-
-        println( "< yIdx = $yIdx; φIdx = $φIdx; inputIdx = $inputIdx; x[$inputIdx] = $(x[inputIdx]) >")
 
         for k in 1:tapsPerφ
             @inbounds accumulator += PFB[k, φIdx] * x[ k + xFirstIdx + xOffset ]
         end
 
-        inputIdxLast = inputIdx
-        φIdxLast     = φIdx
+        inputIdxLast = inputIdx         # TODO: get rid of need to store last 
+        φIdxLast     = φIdx             # TODO: get rid of need to store last 
         inputIdx    += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
         φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize
         
         buffer[ yIdx ] = accumulator
     end
-    
-    
+        
     xLeftoverLen  = length( x ) - inputIdxLast
     sampleDeficit = inputIdx - inputIdxLast - xLeftoverLen
-
-    println( "xLeftoverLen = $xLeftoverLen; inputIdx = $inputIdx; sampleDeficit = $sampleDeficit; φIdx = $φIdx" )
-    @printf( "\n\n\n")
 
     return buffer, xLeftoverLen, sampleDeficit, φIdx
 end
@@ -377,7 +364,7 @@ end
 
 
 
-function resample{T}( PFB::Array{T, 2}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
+function resample{T}( PFB::FilterBank{T}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
     xLen   = length( x ) - xStartIdx + 1
     bufLen = int( ceil( xLen * ratio ))
     buffer = Array( T, bufLen )
