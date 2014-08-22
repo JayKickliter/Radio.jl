@@ -11,29 +11,29 @@ import Multirate
 #               ___] | | \| |__] |___ |___    |  \ |  |  |  |___               #
 #==============================================================================#
 
-function short_singlerate_test( h, x, dlyLine )
+function short_singlerate_test( h, x )
     println( "Testing single rate")
     
     @printf( "\tRadio's Single-rate filt\n\t")
+    dlyLine            = zeros( length(h) - 1 )
     @time nativeResult = Multirate.filt( h, x, dlyLine )
     
-    self = FIRFilter( h )    
+    self = Multirate.FIRFilter( h )    
     @printf( "\tStateful Single-rate filt\n\t")
     @time y = append!( Multirate.filt( self, x[1:250] ) , Multirate.filt( self, x[251:end] ) )
 
     @printf( "\tBase Single-rate filt\n\t")
     @time baseResult   = Base.filt( h, 1.0, x )
 
-    display( [ baseResult nativeResult y ])
+    # display( [ baseResult nativeResult y ])
     areApprox( nativeResult, baseResult ) && areApprox( y, baseResult )    
 end
 
 #=============================
-h = rand( 56 )
-x = rand( 1_000_000 )
-dlyLine = zeros( length(h) - 1 )
+h = rand( 56 );
+x = rand( 1_000_000 );
 
-short_singlerate_test( h, x, dlyLine )
+short_singlerate_test( h, x )
 =============================#
 
 
@@ -143,7 +143,7 @@ function short_interpolate_test( h, x, factor )
     @time statelessResult = Multirate.interpolate( h, x, factor )
     
     @printf( "Radio's stateful interpolate\n\t")
-    self = FIRFilter( h, factor//1 )
+    self = Multirate.FIRFilter( h, factor//1 )
     x1   = x[ 1:int(floor(length(x)) * 0.25) ]
     x2   = x[ length(x1)+1: end ]
     @time begin
