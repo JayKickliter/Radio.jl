@@ -13,7 +13,7 @@ export  FIRFilter,      polyize,
 #                                    Types                                     #
 #==============================================================================#
 
-typealias PFB{T} AbstractMatrix{T}
+typealias PFB{T} Array{T,2}
 
 abstract Filter
 abstract FIRKernel
@@ -64,7 +64,7 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
         reqDlyLineLen = max( decimation-1, length(h)-1 )
         kernel        = FIRDecimator( h, decimation )
     elseif decimation == 1                                    # interpolate
-        pfb              = polyize( h, interpolation )
+        pfb              = flipud(polyize( h, interpolation ))
         ( tapsPerφ, Nφ ) = size( pfb )
         reqDlyLineLen    = tapsPerφ - 1
         kernel           = FIRInterpolator( pfb, interpolation, Nφ, tapsPerφ )
@@ -245,31 +245,20 @@ end
 #               | | \|  |  |___ |  \ |    |___ |__| |  |  |  |___              #
 #==============================================================================#
 
-# Stateless in-place interpolation with a pre-allocated buffer
-function interpolate!{T}( buffer::AbstractVector{T}, pfb::PFB{T}, x::AbstractVector{T}, dlyLine::AbstractVector{T} = T[] )
-
-    (tapsPerφ, Nφ) = size( pfb )                                                   # each column is a phase of the pfb, the rows hold the individual h
-    xLen           = length( x )                                                   # number of input items
-    bufLen         = length( buffer )
-    reqDlyLineLen  = tapsPerφ - 1
-    dlyLineLen     = length( dlyLine )
-    outLen         = xLen * Nφ
-    criticalYidx   = min( reqDlyLineLen*Nφ, outLen )
+function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vector{T} )    
+    pfb::PFB{T}        = self.kernel.pfb
+    dlyLine::Vector{T} = self.dlyLine
+    interpolation      = self.kernel.interpolation
+    Nφ                 = self.kernel.Nφ
+    tapsPerφ           = self.kernel.tapsPerφ
+    xLen               = length( x )
+    bufLen             = length( buffer )
+    reqDlyLineLen      = self.reqDlyLineLen
+    outLen             = xLen * interpolation
+    criticalYidx       = min( reqDlyLineLen*interpolation, outLen )
 
     bufLen >= outLen || error( "length( buffer ) must be >= interpolation * length(x)")
 
-    if dlyLineLen != reqDlyLineLen                                                 # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
-        if dlyLineLen == 0
-            dlyLine = zeros( T, reqDlyLineLen )
-        elseif dlyLineLen < reqDlyLineLen
-            dlyLine = prepend!( dlyLine, zeros(  T, reqDlyLineLen - dlyLineLen ) ) # 
-        else
-            dlyLine = dlyLine[ end+1-reqDlyLineLen:end ]
-        end
-        dlyLineLen = length( dlyLine )
-    end
-
-    pfb      = flipud(pfb)
     inputIdx = 1
     φ        = 1
 
@@ -300,36 +289,21 @@ function interpolate!{T}( buffer::AbstractVector{T}, pfb::PFB{T}, x::AbstractVec
         @inbounds buffer[yIdx]  = accumulator
         (φ, inputIdx) = φ == Nφ ? ( 1, inputIdx+1 ) : ( φ+1, inputIdx )
     end
-
+    
+    if xLen >= reqDlyLineLen
+        self.dlyLine = x[end-reqDlyLineLen+1:end]
+    else
+        self.dlyLine = [ dlyLine, x ][end-reqDlyLineLen+1:end]
+    end
+    
     return buffer
 end
 
-function interpolate{T}( pfb::PFB{T}, x::Vector{T}, dlyLine::AbstractVector{T} = T[] )
+function filt( self::FIRFilter{FIRInterpolator}, x::Vector )
     xLen   = length( x )
-    bufLen = xLen*size(pfb)[2]
+    bufLen = xLen * self.kernel.interpolation
     buffer = similar( x, bufLen )
-    interpolate!( buffer, pfb, x, dlyLine )
-end
-
-function interpolate( h, x, interpolation, dlyLine = eltype(x)[] )
-    pfb = polyize( h, interpolation )
-    interpolate( pfb, x, dlyLine )
-end
-
-# Stateful interploation
-function filt( self::FIRFilter{FIRInterpolator}, x::AbstractVector )
-    xLen          = length( x )
-    interpolation = self.kernel.interpolation
-    reqDlyLineLen = self.reqDlyLineLen
-
-    y = interpolate( self.kernel.pfb, x, self.dlyLine )
-
-    if xLen >= reqDlyLineLen
-        self.dlyLine = x[ end-reqDlyLineLen+1 : end ]
-    else
-        self.dlyLine = [ self.dlyLine, x ][end-reqDlyLineLen+1:end]
-    end
-    return y
+    filt!( buffer, self, x )
 end
 
 
@@ -345,21 +319,21 @@ end
 function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
 
     (tapsPerφ, Nφ) = size( pfb )
-    interpolation  = num( ratio )
+    self.kernel.interpolation  = num( ratio )
     decimation     = den( ratio )
     xOffset        = xStartIdx - 1
     xLen           = length( x ) - xOffset
     bufLen         = length( buffer )
     outLen         = outputlength( ratio, xLen, φIdx )
     criticalYidx   = min( int(floor( tapsPerφ * ratio )), outLen )
-    φIdxStepSize   = mod( decimation, interpolation )
+    φIdxStepSize   = mod( decimation, self.kernel.interpolation )
     criticalφIdx   = Nφ - φIdxStepSize
     reqDlyLineLen  = tapsPerφ - 1
     dlyLine        = length( dlyLine ) == 0 ? zeros( T, reqDlyLineLen ) : dlyLine
     dlyLineLen     = length( dlyLine )
 
     1 <= xStartIdx <= length( x ) || error( "xStartIdx must be >= 1 and =< length( x ) " )
-    bufLen >= outLen              || error( "length( buffer ) must be >= int(ceil( xLen * interpolation / decimation ))")
+    bufLen >= outLen              || error( "length( buffer ) must be >= int(ceil( xLen * self.kernel.interpolation / decimation ))")
     dlyLineLen == reqDlyLineLen   || error( "the optional parameter dlyLine, if provided, must a length of size(pfb)[1]-1")
 
     pfb = flipud( pfb )
@@ -382,7 +356,7 @@ function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rati
 
         inputIdxLast = inputIdx                                                             # TODO: get rid of need to store last
         φIdxLast     = φIdx                                                                 # TODO: get rid of need to store last
-        inputIdx    += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
+        inputIdx    += int( floor( ( φIdx + decimation - 1 ) / self.kernel.interpolation ) )
         φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize # 
 
         buffer[ yIdx ] = accumulator
@@ -398,7 +372,7 @@ function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rati
 
         inputIdxLast   = inputIdx                                                           # TODO: get rid of need to store last
         φIdxLast       = φIdx                                                               # TODO: get rid of need to store last
-        inputIdx      += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
+        inputIdx      += int( floor( ( φIdx + decimation - 1 ) / self.kernel.interpolation ) )
         φIdx           = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize
         buffer[ yIdx ] = accumulator
     end
