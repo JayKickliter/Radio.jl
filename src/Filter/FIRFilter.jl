@@ -1,10 +1,13 @@
 module Multirate
 
+import Base: filt, filt!, reset
+
 export  FIRFilter,      polyize,
         filt!,          filt,
         decimate!,      decimate,
         interpolate!,   interpolate,
-        resample!,      resample
+        resample!,      resample,
+        reset
 
 #==============================================================================#
 #                                    Types                                     #
@@ -75,16 +78,24 @@ end
 
 
 #==============================================================================#
-#                           ____ _    _  _ ____ _  _                           #
-#                           |___ |    |  | [__  |__|                           #
-#                           |    |___ |__| ___] |  |                           #
+#                            ____ ____ ____ ____ ___                           #
+#                            |__/ |___ [__  |___  |                            #
+#                            |  \ |___ ___] |___  |                            #
 #==============================================================================#
 
-function flush( self::FIRFilter )
-    dlyLine = self.dlyLine
-    for i in 1:length( dlyLine )
-        dlyLine[i] = 0
-    end
+# Resets filter and its kernel to an initial state
+
+# Does nothing for non-rational kernels
+reset( self::FIRKernel ) = self
+
+# For rational kernel, set φIdx back to 1
+reset( self::FIRRational ) = self.φIdx = 1
+
+# For FIRFilter, set delay line to zeros of same tyoe and required length
+function reset( self::FIRFilter )
+    self.dlyLine = zeros( eltype( self.dlyLine ), self.reqDlyLineLen )
+    reset( self.kernel )
+    return self
 end
 
 
@@ -96,23 +107,42 @@ end
 #                      |  |     |  |__|    |    |    |__]                      #
 #==============================================================================#
 
-function polyize{T}( h::Vector{T}, interpolation )
+# Converts a vector of coefficients to a matrix. Each column is a filter.
+# Appends zeros if necessary.
+# Example:
+#   julia> polyize( [1:9], 4 )
+#   3x4 Array{Int64,2}:
+#    1  2  3  4
+#    5  6  7  8
+#    9  0  0  0
+
+function polyize{T}( h::Vector{T}, numFilters )
     hLen      = length( h )
-    hLenPerφ  = int( ceil( hLen/interpolation ))
-    pfbSize   = hLenPerφ * interpolation
-    # check that the vector is an integer multiple of interpolation
-    if hLen != pfbSize
-        hExtended             = similar( h, pfbSize )
+    hLenPerφ  = int( ceil( hLen/numFilters ))
+    pfbSize   = hLenPerφ * numFilters
+
+    if hLen != pfbSize                                # check that the vector is an integer multiple of numFilters
+        hExtended             = similar( h, pfbSize ) # No? extend and zero pad
         hExtended[1:hLen]     = h
         hExtended[hLen+1:end] = 0
         h                     = hExtended
     end
-    nFilters  = interpolation
+
     hLen      = length( h )
-    hLenPerφ  = int( hLen/nFilters )
-    pfb       = reshape( h, nFilters, hLenPerφ )'
+    hLenPerφ  = int( hLen/numFilters )
+    pfb       = reshape( h, numFilters, hLenPerφ )'
 end
 
+#==============================================================================#
+#               ____ _  _ ___ ___  _  _ ___    _    ____ _  _                  #
+#               |  | |  |  |  |__] |  |  |     |    |___ |\ |                  #
+#               |__| |__|  |  |    |__|  |     |___ |___ | \|                  #
+#==============================================================================#
+
+# Calculates the resulting length of a multirate filtering operation, given
+#   resampling ratio, input length, and initial phase of the filter bank.
+#
+# It's hard to explain how this works without a diagram.
 
 function outputlength( ratio::Rational, inputLen, φ = 1 )
     interpolation = num( ratio )
@@ -128,6 +158,7 @@ end
 #               ___] | | \| |__] |___ |___    |  \ |  |  |  |___               #
 #==============================================================================#
 
+# Stateless single-rate filtering with pre-allocated buffer
 function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vector{T} = T[] )
 
     bufLen        = length( buffer )
@@ -155,13 +186,13 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vecto
         accumulator = zero(T)
         hIdx        = 1
 
-        for dlyLineIdx in bufIdx:dlyLineLen                  # this loop takes care of previous dlyLine
+        for dlyLineIdx in bufIdx:dlyLineLen                  # dot( h[1:end-bufIdx], dlyLine[bufIdx:end] )
             @inbounds accumulator += h[hIdx] * dlyLine[dlyLineIdx]
             hIdx += 1
         end
 
         hIdx = hLen-bufIdx+1
-        for xIdx in 1:bufIdx                                 # this loop takes care of the first hlen-1 samples in x
+        for xIdx in 1:bufIdx                                 # dot( h[end-bufIdx+1:end], x[1:bufIdx] )
             @inbounds accumulator += h[hIdx] * x[xIdx]
             hIdx += 1
         end
@@ -169,12 +200,12 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vecto
         @inbounds buffer[bufIdx] = accumulator
     end
 
-    for bufIdx in hLen:xLen                                  # filter ramp is complete, normal filtering from this point on
+    for bufIdx in hLen:xLen
 
         accumulator = zero(T)
         xIdx        = bufIdx-hLen+1
 
-        @simd for hIdx in 1:hLen
+        @simd for hIdx in 1:hLen                             # dot( h[1:end], x[end-hIdx+1:end] )
             @inbounds accumulator += h[hIdx] * x[xIdx]
             xIdx += 1
         end
@@ -185,13 +216,14 @@ function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vecto
     return buffer
 end
 
-
+# Stateless not-in-place single rate filtering
 filt{T}( h::Vector{T}, x::Vector{T}, dlyLine::Vector{T} = T[] ) = filt!( similar(x), h, x, dlyLine )
 
-function filt( self::FIRFilter{FIRStandard}, x )
+# Stateful single-rate filtering
+function filt( self::FIRFilter{FIRStandard}, x ) # FIXME: Just realized that this filt operation doesn't check the input lenth
     h            = self.kernel.h
     hLen         = length( h )
-    nextDlyLine  = x[end-hLen+2:end]
+    nextDlyLine  = x[ end - self.reqDlyLineLen + 1 : end ]
     y            = filt( self.kernel.h, x, self.dlyLine )
     self.dlyLine = nextDlyLine
 
@@ -207,23 +239,24 @@ end
 #               | | \|  |  |___ |  \ |    |___ |__| |  |  |  |___              #
 #==============================================================================#
 
+# Stateless in-place interpolation with a pre-allocated buffer
 function interpolate!{T}( buffer::AbstractVector{T}, PFB::FilterBank{T}, x::AbstractVector{T}, dlyLine::AbstractVector{T} = T[] )
 
-    (φLen, Nφ)    = size( PFB )                                                    # each column is a phase of the PFB, the rows hold the individual h
-    xLen          = length( x )                                                    # number of input items
-    bufLen        = length( buffer )
-    reqDlyLineLen = φLen - 1
-    dlyLineLen    = length( dlyLine )
-    outLen        = xLen * Nφ
-    criticalYidx  = min( reqDlyLineLen*Nφ, outLen )
+    (tapsPerφ, Nφ) = size( PFB )                                                   # each column is a phase of the PFB, the rows hold the individual h
+    xLen           = length( x )                                                   # number of input items
+    bufLen         = length( buffer )
+    reqDlyLineLen  = tapsPerφ - 1
+    dlyLineLen     = length( dlyLine )
+    outLen         = xLen * Nφ
+    criticalYidx   = min( reqDlyLineLen*Nφ, outLen )
 
     bufLen >= outLen || error( "length( buffer ) must be >= interpolation * length(x)")
 
-    if dlyLineLen != reqDlyLineLen
+    if dlyLineLen != reqDlyLineLen                                                 # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
         if dlyLineLen == 0
             dlyLine = zeros( T, reqDlyLineLen )
         elseif dlyLineLen < reqDlyLineLen
-            dlyLine = prepend!( dlyLine, zeros(  T, reqDlyLineLen - dlyLineLen ) ) # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
+            dlyLine = prepend!( dlyLine, zeros(  T, reqDlyLineLen - dlyLineLen ) ) # 
         else
             dlyLine = dlyLine[ end+1-reqDlyLineLen:end ]
         end
@@ -238,12 +271,12 @@ function interpolate!{T}( buffer::AbstractVector{T}, PFB::FilterBank{T}, x::Abst
 
         accumulator = zero(T)
 
-        for k in 1:φLen-inputIdx
+        for k in 1:tapsPerφ-inputIdx
             @inbounds accumulator += PFB[k, φ] * dlyLine[k+inputIdx-1]
         end
 
         for k in 1:inputIdx
-            @inbounds accumulator += PFB[φLen-inputIdx+k, φ] * x[k]
+            @inbounds accumulator += PFB[tapsPerφ-inputIdx+k, φ] * x[k]
         end
 
         @inbounds buffer[yIdx]  = accumulator
@@ -254,8 +287,8 @@ function interpolate!{T}( buffer::AbstractVector{T}, PFB::FilterBank{T}, x::Abst
 
         accumulator = zero(T)
 
-        for k in 1:φLen
-            @inbounds accumulator += PFB[ k, φ ] * x[ inputIdx - φLen + k ]
+        for k in 1:tapsPerφ
+            @inbounds accumulator += PFB[ k, φ ] * x[ inputIdx - tapsPerφ + k ]
         end
 
         @inbounds buffer[yIdx]  = accumulator
@@ -265,13 +298,19 @@ function interpolate!{T}( buffer::AbstractVector{T}, PFB::FilterBank{T}, x::Abst
     return buffer
 end
 
-interpolate{T}( PFB::FilterBank{T}, x::Vector{T}, dlyLine::AbstractVector{T} = T[] ) = interpolate!( similar( x, length(x)*size(PFB)[2] ), PFB, x, dlyLine )
-interpolate( h, x, interpolation, dlyLine = eltype(x)[] )                          = interpolate( polyize( h, interpolation ), x, dlyLine )
-
-function filt( self::FIRFilter{FIRInterpolator}, x )
-   interpolate( self.kernel.PFB, x )
+function interpolate{T}( PFB::FilterBank{T}, x::Vector{T}, dlyLine::AbstractVector{T} = T[] )
+    xLen   = length( x )
+    bufLen = xLen*size(PFB)[2]
+    buffer = similar( x, bufLen )
+    interpolate!( buffer, PFB, x, dlyLine )
 end
 
+function interpolate( h, x, interpolation, dlyLine = eltype(x)[] )
+    pfb = polyize( h, interpolate )
+    interpolate( pfb, x, dlyLine )
+end
+
+# Stateful interploation
 function filt( self::FIRFilter{FIRInterpolator}, x::AbstractVector )
     xLen          = length( x )
     interpolation = self.kernel.interpolation
@@ -296,6 +335,7 @@ end
 #           |  \ |  |  |  .   |  \ |___ ___] |  | |  | |    |___ |___          #
 #==============================================================================#
 
+# Stateless in-place rational resampling with pre-allocted buffer
 function resample!{T}( buffer::Vector{T}, PFB::FilterBank{T}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
 
     (tapsPerφ, Nφ) = size( PFB )
@@ -334,24 +374,24 @@ function resample!{T}( buffer::Vector{T}, PFB::FilterBank{T}, x::Vector{T}, rati
             accumulator += PFB[ end-inputIdx+k, φIdx ] * x[ k+xOffset ]
         end
 
-        inputIdxLast = inputIdx         # TODO: get rid of need to store last
-        φIdxLast     = φIdx             # TODO: get rid of need to store last
+        inputIdxLast = inputIdx                                                             # TODO: get rid of need to store last
+        φIdxLast     = φIdx                                                                 # TODO: get rid of need to store last
         inputIdx    += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
-        φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize
+        φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize # 
 
         buffer[ yIdx ] = accumulator
     end
 
     for yIdx in criticalYidx+1:outLen
         accumulator = zero(T)
-        xFirstIdx   = inputIdx-tapsPerφ # this is actually ones less than the input of our first, with k added below it is the actuall index
+        xFirstIdx   = inputIdx-tapsPerφ                                                     # this is actually ones less than the input of our first, with k added below it is the actuall index
 
         for k in 1:tapsPerφ
             accumulator += PFB[k, φIdx] * x[ k + xFirstIdx + xOffset ]
         end
 
-        inputIdxLast   = inputIdx         # TODO: get rid of need to store last
-        φIdxLast       = φIdx             # TODO: get rid of need to store last
+        inputIdxLast   = inputIdx                                                           # TODO: get rid of need to store last
+        φIdxLast       = φIdx                                                               # TODO: get rid of need to store last
         inputIdx      += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
         φIdx           = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize
         buffer[ yIdx ] = accumulator
@@ -363,9 +403,7 @@ function resample!{T}( buffer::Vector{T}, PFB::FilterBank{T}, x::Vector{T}, rati
     return buffer, xLeftoverLen, sampleDeficit, φIdx
 end
 
-
-
-
+# Stateless not-inplace rational resampling
 function resample{T}( PFB::FilterBank{T}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
     xOffset = xStartIdx - 1
     xLen   = length( x ) - xOffset
@@ -374,14 +412,10 @@ function resample{T}( PFB::FilterBank{T}, x::Vector{T}, ratio::Rational; dlyLine
     resample!( buffer, PFB, x, ratio, dlyLine = dlyLine, xStartIdx = xStartIdx, φIdx = φIdx )
 end
 
-
-
-
 resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h, num(ratio)), x, ratio )
 
 
-
-
+# Stateful rational resampling
 function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
     xLen          = length( x )
     PFB           = self.kernel.PFB
@@ -419,6 +453,7 @@ end
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
+# Stateless in-place decimation with pre-allocted buffer
 function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::AbstractVector{T}, decimation::Integer, dlyLine::AbstractVector{T} = T[]; xStartIdx = 1 )
 
     xOffset       = xStartIdx - 1
@@ -443,19 +478,19 @@ function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::Abstr
         dlyLineLen = length( dlyLine )
     end
 
-    h = flipud(h)                                                         # TODO: figure out a way to not always have to flip taps each time
-    inputIdx = 1                                                          # inputIdx is is the current input, not the actual index of of the current x in the delay line
-    for yIdx in 1:criticalYidx                                            # Filtering is broken up into two outer loops
-                                                                          # This first loop takes care of filter ramp up.
+    h = flipud(h)                                                                  # TODO: figure out a way to not always have to flip taps each time
+    inputIdx = 1                                                                   # inputIdx is is the current input, not the actual index of of the current x in the delay line
+    for yIdx in 1:criticalYidx                                                     # Filtering is broken up into two outer loops
+                                                                                   # This first loop takes care of filter ramp up.
         hIdx        = 1
         accumulator = zero(T)
 
-        for dlyLineIdx in inputIdx:dlyLineLen                             # Inner Loop 1: Handles convolution of taps and delay line
+        for dlyLineIdx in inputIdx:dlyLineLen                                      # Inner Loop 1: Handles convolution of taps and delay line
             accumulator += h[hIdx] * dlyLine[dlyLineIdx]
             hIdx += 1
         end
 
-        for k in 1:inputIdx                                               # Inner Loop 2: handles convolution of taps and x
+        for k in 1:inputIdx                                                        # Inner Loop 2: handles convolution of taps and x
             accumulator += h[ hIdx ] * x[ k + xOffset ]
             hIdx += 1
         end
@@ -466,7 +501,7 @@ function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::Abstr
 
     inputIdx -= hLen
 
-    for yIdx in criticalYidx+1:outLen                                     # second outer loop, we are now in the clear to to convolve without x[inputIdx-]
+    for yIdx in criticalYidx+1:outLen                                              # second outer loop, we are now in the clear to to convolve without x[inputIdx-]
         accumulator  = zero(T)
 
         for k in 1:hLen
@@ -480,16 +515,17 @@ function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::Abstr
     inputIdx += hLen - decimation
     xLeftoverLen = max( xLen - inputIdx, 0 )
 
-    return buffer, xLeftoverLen                                           # TODO: return number of elements written to buffer
+    return buffer, xLeftoverLen                                                    # TODO: return number of elements written to buffer
 end
 
-
+# Not in-place stateless decimation
 function decimate{T}( h::Vector{T}, x::AbstractVector{T}, decimation::Integer, dlyLine::Vector{T} = T[]; xStartIdx = 1 )
     xLen   = length( x ) - xStartIdx + 1
     buffer = similar( x, int(ceil( xLen / decimation )) )
     decimate!( buffer, h, x, decimation, dlyLine, xStartIdx = xStartIdx )
 end
 
+# Stateful decimation
 function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     xLen          = length( x )
     h             = self.kernel.h
