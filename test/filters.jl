@@ -14,10 +14,10 @@ import Multirate
 function short_singlerate_test( h, x, dlyLine )
     println( "Testing single rate")
     
-    @printf( "\tRadio's Single-rate filt\n\t")
+    @printf( "\tMultirate's Single-rate filt\n\t")
     @time nativeResult = Multirate.filt( h, x, dlyLine )
     
-    self = FIRFilter( h )    
+    self = Multirate.FIRFilter( h )    
     @printf( "\tStateful Single-rate filt\n\t")
     @time y = append!( Multirate.filt( self, x[1:250] ) , Multirate.filt( self, x[251:end] ) )
 
@@ -29,8 +29,8 @@ function short_singlerate_test( h, x, dlyLine )
 end
 
 #=============================
-h = rand( 56 )
-x = rand( 1_000_000 )
+h = rand( 31 )
+x = rand( 10_000_000 )
 dlyLine = zeros( length(h) - 1 )
 
 short_singlerate_test( h, x, dlyLine )
@@ -53,6 +53,7 @@ function test_decimate{Th, Tx}( ::Type{Th}, ::Type{Tx}, hLen, xLen, factor )
     nativeResult = Multirate.decimate( h, x, factor )
     baseResult   = Base.filt( h, one(Th), x )
     baseResult   = baseResult[1:factor:end]
+
     areApprox( nativeResult, baseResult )
 end
 
@@ -60,7 +61,7 @@ end
 
 function short_decimate_test( h, x, factor, step )
     xLen = length(x)
-    # @printf( "\nRadio's decimation\n\t")
+    # @printf( "\nMultirate's decimation\n\t")
     # @time nativeResult = decimate( h, x, factor )
     # display( nativeResult )
     #
@@ -139,11 +140,11 @@ end
 
 
 function short_interpolate_test( h, x, factor )    
-    @printf( "Radio's stateless interpolate\n\t")
+    @printf( "Multirate's stateless interpolate\n\t")
     @time statelessResult = Multirate.interpolate( h, x, factor )
     
-    @printf( "Radio's stateful interpolate\n\t")
-    self = FIRFilter( h, factor//1 )
+    @printf( "Multirate's stateful interpolate\n\t")
+    self = Multirate.FIRFilter( h, factor//1 )
     x1   = x[ 1:int(floor(length(x)) * 0.25) ]
     x2   = x[ length(x1)+1: end ]
     @time begin
@@ -189,11 +190,11 @@ function short_rational_test( h, x, ratio )
     bufLen     = int(ceil( xLen * ratio )) 
     buffer     = similar( x, bufLen )
     
-    @printf( "Radio's stateless rational resampling\n\t")
+    @printf( "Multirate's stateless rational resampling\n\t")
     @time statelessResult = Multirate.resample!( buffer, PFB, x, upfactor//downfactor );
     statelessResult = statelessResult[1]
     
-    @printf( "Radio's stateful rational resampling\n\t")
+    @printf( "Multirate's stateful rational resampling\n\t")
     self = Multirate.FIRFilter( h, ratio );
     statefulResult = similar( x, 0 )
     @time for i = 1:length(x)
