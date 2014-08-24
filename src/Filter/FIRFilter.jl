@@ -27,6 +27,8 @@ end
 type FIRInterpolator <: FIRKernel
     pfb::PFB
     interpolation::Int
+    Nφ::Int
+    tapsPerφ::Int
 end
 
 # Decimator FIR kernel
@@ -39,6 +41,8 @@ end
 type FIRRational  <: FIRKernel
     pfb::PFB
     ratio::Rational
+    Nφ::Int
+    tapsPerφ::Int
     φIdx::Int
 end
 
@@ -60,13 +64,15 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
         reqDlyLineLen = max( decimation-1, length(h)-1 )
         kernel        = FIRDecimator( h, decimation )
     elseif decimation == 1                                    # interpolate
-        pfb           = polyize( h, interpolation )
-        reqDlyLineLen = size( pfb )[1] - 1
-        kernel        = FIRInterpolator( pfb, interpolation )
+        pfb              = polyize( h, interpolation )
+        ( tapsPerφ, Nφ ) = size( pfb )
+        reqDlyLineLen    = tapsPerφ - 1
+        kernel           = FIRInterpolator( pfb, interpolation, Nφ, tapsPerφ )
     else                                                      # rational
-        pfb           = polyize( h, interpolation )
-        reqDlyLineLen = size( pfb )[1] - 1
-        kernel        = FIRRational( pfb, resampleRatio, 1 )
+        pfb              = polyize( h, interpolation )
+        ( tapsPerφ, Nφ ) = size( pfb )
+        reqDlyLineLen    = tapsPerφ - 1
+        kernel           = FIRRational( pfb, resampleRatio, Nφ, tapsPerφ, 1 )
     end
 
     dlyLine = zeros( eltype( h ), reqDlyLineLen )
