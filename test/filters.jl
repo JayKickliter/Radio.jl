@@ -11,10 +11,12 @@ import Multirate
 #               ___] | | \| |__] |___ |___    |  \ |  |  |  |___               #
 #==============================================================================#
 
-function short_singlerate_test( h, x, dlyLine )
+function short_singlerate_test( h, x )
     println( "Testing single rate")
     
     @printf( "\tMultirate's Single-rate filt\n\t")
+    dlyLine = zeros( length(h) - 1 )
+
     @time nativeResult = Multirate.filt( h, x, dlyLine )
     
     self = Multirate.FIRFilter( h )    
@@ -24,16 +26,15 @@ function short_singlerate_test( h, x, dlyLine )
     @printf( "\tBase Single-rate filt\n\t")
     @time baseResult   = Base.filt( h, 1.0, x )
 
-    display( [ baseResult nativeResult y ])
+    # display( [ baseResult nativeResult y ])
     areApprox( nativeResult, baseResult ) && areApprox( y, baseResult )    
 end
 
 #=============================
-h = rand( 31 )
-x = rand( 10_000_000 )
-dlyLine = zeros( length(h) - 1 )
+h = rand( 56 );
+x = rand( 1_000_000 );
 
-short_singlerate_test( h, x, dlyLine )
+short_singlerate_test( h, x )
 =============================#
 
 
