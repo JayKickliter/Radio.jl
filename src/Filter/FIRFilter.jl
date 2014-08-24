@@ -143,18 +143,6 @@ end
 #   resampling ratio, input length, and initial phase of the filter bank.
 #
 # It's hard to explain how this works without a diagram.
-
-
-
-#==============================================================================#
-#        ____ _  _ ___ ___  _  _ ___    _    ____ _  _ ____ ___ _  _           #
-#        |  | |  |  |  |__] |  |  |     |    |___ |\ | | __  |  |__|           #
-#        |__| |__|  |  |    |__|  |     |___ |___ | \| |__]  |  |  |           #
-#                                                                              #
-# =============================================================================#
-# Returns the length of resampling operation given resampling ratio,           #
-#   input length, and initial phase.                                           #
-#==============================================================================#
                                                             
 function outputlength( ratio::Rational, inputLen, φ = 1 )
     interpolation = num( ratio )
