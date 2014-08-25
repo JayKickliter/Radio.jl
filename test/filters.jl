@@ -146,26 +146,21 @@ end
 #           |  \ |  |  |  .   |  \ |___ ___] |  | |  | |    |___ |___          #
 #==============================================================================#
 
-function short_rational_test( h, x, ratio )
+function test_rational( h, x, ratio )
+    xLen       = length( x )
+    pivotPoint = min( 100, ifloor( xLen/4 ))
+    x1         = x[ 1 : pivotPoint ]
+    x2         = x[ pivotPoint+1 : end ]
     upfactor   = num( ratio )
     downfactor = den( ratio )
-    PFB        = Multirate.polyize( h, upfactor )
-    xLen       = length( x )
-    bufLen     = int(ceil( xLen * ratio )) 
-    buffer     = similar( x, bufLen )
-    
-    @printf( "Multirate's stateless rational resampling\n\t")
-    @time statelessResult = Multirate.resample!( buffer, PFB, x, upfactor//downfactor );
-    statelessResult = statelessResult[1]
     
     @printf( "Multirate's stateful rational resampling\n\t")
     self = Multirate.FIRFilter( h, ratio );
-    statefulResult = similar( x, 0 )
-    @time for i = 1:length(x)
-        y = Multirate.filt( self, x[i:i] )
-        # println( "    $y = Multirate.filt( self, $(x[i:i]) )" )
-        append!( statefulResult, y )
+    @time begin
+        y1 = Multirate.filt( self, x1 )
+        y2 = Multirate.filt( self, x2 )
     end
+    statefulResult = [ y1, y2 ]
     
     @printf( "Naive resampling\n\t")
     @time begin
@@ -175,38 +170,34 @@ function short_rational_test( h, x, ratio )
         for n = 0:length(x)-1;
             xx[ n*upfactor+1 ] = x[ n+1 ];
         end
-        
+                
         naiveResultInterpolated = Base.filt( h, 1.0, xx );
         naiveResult = [ naiveResultInterpolated[n] for n = 1:downfactor:length( naiveResultInterpolated ) ]
     end
-
-    if areApprox( statelessResult, naiveResult ) && areApprox( statefulResult, naiveResult )
-        return true
-    else
-        display( [ naiveResult statelessResult statefulResult ] )
-        return false
-    end
     
+    display( [ naiveResult statefulResult ] )
+
+    areApprox( naiveResult, statefulResult )
 end
 
 h = rand( 25 );
-x = rand( int(1e6) );
+x = rand( int(100e3) );
 # h = Float64[10:-1:1];
 # x = Float64[1:100];
 Th = eltype( h )
 Tx = eltype( x )
+interpolation = 3
+decimation = 4
 
-Multirate.filt( Multirate.FIRFilter( h ), x[1:min(100, length(x))]);
-@test test_singlerate( h, x );
+# Multirate.filt( Multirate.FIRFilter( h ), x[1:min(100, length(x))]);
+# @test test_singlerate( h, x );
 
-decimation = 9
-Multirate.filt( Multirate.FIRFilter( h, 1//decimation ), x[1:min(100, length(x))]);
-@test test_decimate( h, x, decimation );
+# Multirate.filt( Multirate.FIRFilter( h, 1//decimation ), x[1:min(100, length(x))]);
+# @test test_decimate( h, x, decimation );
 
-interpolation = 7
-Multirate.filt( Multirate.FIRFilter( h, interpolation//1 ), x[1:min(100, length(x))]);
-@test test_interpolate( h, x, interpolation )
+# Multirate.filt( Multirate.FIRFilter( h, interpolation//1 ), x[1:min(100, length(x))]);
+# @test test_interpolate( h, x, interpolation )
 
-Multirate.filt( Multirate.FIRFilter( h, interpolation//decimation ), x[1:min(100, length(x))]);
-@test test_interpolate( h, x, interpolation )
-
+ratio = interpolation//decimation
+Multirate.filt( Multirate.FIRFilter( h, ratio ), x[1:min(100, length(x))]);
+@test test_rational( h, x, ratio )
