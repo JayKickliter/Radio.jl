@@ -129,7 +129,7 @@ end
 
 function polyize{T}( h::Vector{T}, numFilters::Integer )
     hLen      = length( h )
-    hLenPerφ  = int( ceil( hLen/numFilters ))
+    hLenPerφ  = iceil(  hLen/numFilters  )
     pfbSize   = hLenPerφ * numFilters
 
     if hLen != pfbSize                                # check that the vector is an integer multiple of numFilters
@@ -159,7 +159,7 @@ function outputlength( ratio::Rational, inputLen, φ = 1 )
     interpolation = num( ratio )
     decimation    = den( ratio )
     outLen        = (( inputLen * interpolation ) - φ + 1 ) / decimation
-    int( ceil( outLen ) )
+    iceil(  outLen  )
 end
 
 
@@ -315,7 +315,7 @@ function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rati
     dlyLineLen     = length( dlyLine )
 
     1 <= xStartIdx <= length( x ) || error( "xStartIdx must be >= 1 and =< length( x ) " )
-    bufLen >= outLen              || error( "length( buffer ) must be >= int(ceil( xLen * self.kernel.interpolation / decimation ))")
+    bufLen >= outLen              || error( "length( buffer ) must be >= iceil(  xLen * self.kernel.interpolation / decimation  )")
     dlyLineLen == reqDlyLineLen   || error( "the optional parameter dlyLine, if provided, must a length of size(pfb)[1]-1")
 
     pfb = flipud( pfb )
@@ -433,9 +433,9 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
     xOffset      = xStartIdx - 1
     xLen         = length( x ) - xOffset
     hLen         = self.kernel.hLen
-    outLen       = int( ceil( xLen / decimation ))
+    outLen       = iceil(  xLen / decimation  )
     # buffer       = similar( x, outLen )
-    criticalYidx = min( int(ceil(hLen / decimation)), outLen ) #
+    criticalYidx = min( iceil( hLen / decimation ), outLen ) #
     dlyLine      = [ dlyLine, x[1:xStartIdx-1] ]
 
     inputIdx = 1                                               # inputIdx is is the current input, not the actual index of of the current x in the delay line
@@ -480,7 +480,7 @@ end
 
 function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
     xLen       = length( x ) - self.reqDlyLineLen + length( self.dlyLine )
-    outLen     = int( ceil( xLen / self.kernel.decimation ))
+    outLen     = iceil(  xLen / self.kernel.decimation  )
     buffer     = similar( x, outLen )
     filt!( buffer, self, x )
 end
