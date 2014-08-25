@@ -297,28 +297,33 @@ end
 #           |  \ |  |  |  .   |  \ |___ ___] |  | |  | |    |___ |___          #
 #==============================================================================#
 
-# Stateless in-place rational resampling with pre-allocted buffer
-function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
+function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T} )
+    xLen          = length( x )
+    pfb           = self.kernel.pfb
+    ratio         = self.kernel.ratio
+    dlyLine       = self.dlyLine
+    dlyLineLen    = length( dlyLine )
+    φIdx          = self.kernel.φIdx
+    reqDlyLineLen = self.reqDlyLineLen
+    combinedLen   = dlyLineLen + xLen
 
-    (tapsPerφ, Nφ) = size( pfb )
-    interpolation  = num( ratio )
-    decimation     = den( ratio )
-    xOffset        = xStartIdx - 1
-    xLen           = length( x ) - xOffset
-    bufLen         = length( buffer )
-    outLen         = outputlength( ratio, xLen, φIdx )
-    criticalYidx   = min( int(floor( tapsPerφ * ratio )), outLen )
-    φIdxStepSize   = mod( decimation, interpolation )
-    criticalφIdx   = Nφ - φIdxStepSize
-    reqDlyLineLen  = tapsPerφ - 1
-    dlyLine        = length( dlyLine ) == 0 ? zeros( T, reqDlyLineLen ) : dlyLine
-    dlyLineLen     = length( dlyLine )
+    if combinedLen <= reqDlyLineLen
+        append!( dlyLine, x )
+        return T[]
+    end
 
-    1 <= xStartIdx <= length( x ) || error( "xStartIdx must be >= 1 and =< length( x ) " )
-    bufLen >= outLen              || error( "length( buffer ) must be >= iceil(  xLen * interpolation / decimation  )")
-    dlyLineLen == reqDlyLineLen   || error( "the optional parameter dlyLine, if provided, must a length of size(pfb)[1]-1")
-
-    pfb = flipud( pfb )
+    xStartIdx     = reqDlyLineLen - dlyLineLen + 1
+    xOffset       = xStartIdx - 1
+    xLen          = length( x ) - xOffset
+    outLen        = outputlength( ratio, xLen, φIdx )
+    dlyLine       = [ dlyLine, x[1:xStartIdx-1] ]
+    criticalYidx  = min( ifloor( self.kernel.tapsPerφ * ratio ), outLen )
+    interpolation = num( ratio )
+    decimation    = den( ratio )
+    φIdxStepSize  = mod( decimation, interpolation )
+    Nφ            = self.kernel.Nφ
+    tapsPerφ      = self.kernel.tapsPerφ
+    criticalφIdx  = Nφ - φIdxStepSize
 
     yIdx         = 0
     inputIdx     = 1
@@ -359,51 +364,20 @@ function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rati
         buffer[ yIdx ] = accumulator
     end
 
-    xLeftoverLen  = length( x ) - xOffset - inputIdxLast
-    sampleDeficit = inputIdx - inputIdxLast - xLeftoverLen
-
-    return buffer, xLeftoverLen, sampleDeficit, φIdx
+    xLeftoverLen     = length( x ) - xOffset - inputIdxLast
+    sampleDeficit    = inputIdx - inputIdxLast - xLeftoverLen
+    dlyLineLen       = reqDlyLineLen - sampleDeficit + 1    
+    self.dlyLine     = [ dlyLine, x[xStartIdx:end] ][end-dlyLineLen+1:end]
+    self.kernel.φIdx = φIdx
+    
+    return buffer
 end
 
-# Stateless not-inplace rational resampling
-function resample{T}( pfb::PFB{T}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
-    xOffset = xStartIdx - 1
-    xLen   = length( x ) - xOffset
-    bufLen = outputlength( ratio, xLen, φIdx )
-    buffer = Array( T, bufLen )
-    resample!( buffer, pfb, x, ratio, dlyLine = dlyLine, xStartIdx = xStartIdx, φIdx = φIdx )
-end
-
-resample{T}( h::Vector{T}, x::Vector{T}, ratio::Rational ) = resample( polyize(h, num(ratio)), x, ratio )
-
-
-# Stateful rational resampling
 function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
-    xLen          = length( x )
-    pfb           = self.kernel.pfb
-    ratio         = self.kernel.ratio
-    dlyLine       = self.dlyLine
-    dlyLineLen    = length( dlyLine )
-    φIdx          = self.kernel.φIdx
-    reqDlyLineLen = self.reqDlyLineLen
-    combinedLen   = dlyLineLen + xLen
-    y             = T[]
-
-    if combinedLen > reqDlyLineLen
-        xStartIdx        = reqDlyLineLen - dlyLineLen + 1
-        self.dlyLine     = [ dlyLine, x[1:xStartIdx-1] ]
-        results          = resample( pfb, x, ratio, dlyLine = self.dlyLine, xStartIdx = xStartIdx, φIdx = φIdx )
-        y                = results[1]
-        xLeftoverLen     = results[2]
-        sampleDeficit    = results[3]
-        self.kernel.φIdx = results[4]
-        nextDlyLineLen   = reqDlyLineLen - sampleDeficit + 1
-        self.dlyLine     = [ self.dlyLine, x[xStartIdx:end] ][end-nextDlyLineLen+1:end]
-    else
-        append!( dlyLine, x )
-    end
-
-    return y
+    xLen   = max( length( x ) - self.reqDlyLineLen + length( self.dlyLine ), 0 )
+    outLen = outputlength( self.kernel.ratio, xLen, self.kernel.φIdx )
+    buffer = similar( x, outLen )
+    filt!( buffer, self, x )        
 end
 
 
