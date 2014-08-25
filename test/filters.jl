@@ -1,3 +1,5 @@
+reload("/Users/jaykickliter/.julia/v0.4/Radio/src/Filter/FIRFilter.jl")
+
 using Base.Test
 import Multirate
 
@@ -11,31 +13,25 @@ import Multirate
 #               ___] | | \| |__] |___ |___    |  \ |  |  |  |___               #
 #==============================================================================#
 
-function short_singlerate_test( h, x )
-    println( "Testing single rate")
+function test_singlerate( h, x )
+    @printf( "\nTesting single rate")
+    xLen = length( x )
+    x1 = x[ 1 : ifloor( xLen/4 ) ]
+    x2 = x[ ifloor( xLen/4)+1 : end ]    
+
+    @printf( "\n\tBase's filt\n\t\t")
+    @time naiveResult = Base.filt( h, 1.0, x )
     
-    @printf( "\tMultirate's Single-rate filt\n\t")
-    dlyLine = zeros( length(h) - 1 )
+    @printf( "\n\tMultirate's stateful filt\n\t\t")
+    self = Multirate.FIRFilter( h, 1//1 )    
+    @time begin
+        y1 = Multirate.filt( self, x1 )        
+        y2 = Multirate.filt( self, x2 )
+    end
+    statefulResult = append!( y1, y2 )        
 
-    @time nativeResult = Multirate.filt( h, x, dlyLine )
-    
-    self = Multirate.FIRFilter( h )    
-    @printf( "\tStateful Single-rate filt\n\t")
-    @time y = append!( Multirate.filt( self, x[1:250] ) , Multirate.filt( self, x[251:end] ) )
-
-    @printf( "\tBase Single-rate filt\n\t")
-    @time baseResult   = Base.filt( h, 1.0, x )
-
-    # display( [ baseResult nativeResult y ])
-    areApprox( nativeResult, baseResult ) && areApprox( y, baseResult )    
+    areApprox( statefulResult, naiveResult )
 end
-
-#=============================
-h = rand( 56 );
-x = rand( 1_000_000 );
-
-short_singlerate_test( h, x )
-=============================#
 
 
 
@@ -46,78 +42,30 @@ short_singlerate_test( h, x )
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-
-function test_decimate{Th, Tx}( ::Type{Th}, ::Type{Tx}, hLen, xLen, factor )
-    h = rand( Th, hLen )
-    x = rand( Tx, xLen )
+function test_decimate( h, x, decimation )
+    @printf( "\nTesting decimation")
+    xLen = length( x )
+    x1 = x[ 1 : ifloor( xLen/4 ) ]
+    x2 = x[ ifloor( xLen/4)+1 : end ]
     
-    nativeResult = Multirate.decimate( h, x, factor )
-    baseResult   = Base.filt( h, one(Th), x )
-    baseResult   = baseResult[1:factor:end]
-
-    areApprox( nativeResult, baseResult )
-end
-
-
-
-function short_decimate_test( h, x, factor, step )
-    xLen = length(x)
-    # @printf( "\nMultirate's decimation\n\t")
-    # @time nativeResult = decimate( h, x, factor )
-    # display( nativeResult )
-    #
-    # self = FIRFilter( h, 1//factor )
-    # @printf( "\nDlyLineful decimation\n\t")
-    # @time begin
-    #     y1   = filt( self, x[1:8])
-    #     y2   = filt( self, x[9:100] )
-    # end
-    # dlyLinefulResult = [y1, y2]
-    # display( dlyLinefulResult )
-    #
-    # @printf( "\nNaive resampling\n\t")
-    # @time begin
-        baseResult = Base.filt( h, one(x[1]), x )[1:factor:end]
-    # end
-    # display( baseResult )
-    #
-    # areApprox( dlyLinefulResult, baseResult ) & areApprox( nativeResult, baseResult ) ? println( "Tests passed" ) : println( "1 or more tests failed")
-    self      = Multirate.FIRFilter( h, 1//factor )
-    incrementalResult = similar(x, 0)
-    for i in 1:step:xLen
-        xNext = x[i : min(i+step-1, xLen)]
-        append!( incrementalResult, Multirate.filt( self, xNext ) )
-        println( "incrementalResult = $(incrementalResult.') ")
+    @printf( "\n\tNaive decimation\n\t\t")
+    @time begin
+        naiveResult   = Base.filt( h, one(eltype(h)), x )
+        naiveResult   = naiveResult[1:decimation:end]
     end
-    # println()
-    # println()
-    
-    # minLen = min( length(baseResult), length( incrementalResult ) )
-    
-    # println( "baseResult   = $(baseResult.')" )
-    # println( "nativeResult = $(incrementalResult.')" )
-    
-    display( [ baseResult incrementalResult ])
-    
-    passed = areApprox( baseResult, incrementalResult )
-    # println( "Passed = $passed" )
 
-    return passed
+    @printf( "\n\tMultirate's stateful decimation\n\t\t")
+    self = Multirate.FIRFilter( h, 1//decimation )    
+    @time begin
+        y1 = Multirate.filt( self, x1 )
+        y2 = Multirate.filt( self, x2 )
+    end
+    
+    statefulResult = append!( y1, y2 )
+
+    areApprox( naiveResult, statefulResult )
 end
 
-#===================================
-h          = Float64[1:10];
-x          = Float64[1:26];
-factor     = 5;
-testPassed = falses( length(x) );
-
-
-for chunkSize = 1:length(x)
-    thisTestPassed = short_decimate_test( h, x, factor, chunkSize )
-    testPassed[chunkSize] = thisTestPassed || error()
-end
-display( testPassed )
-===================================#
 
 
 
@@ -127,54 +75,34 @@ display( testPassed )
 #               | | \|  |  |___ |  \ |    |___ |__| |  |  |  |___              #
 #==============================================================================#
 
-function test_interpolate{Th, Tx}( ::Type{Th}, ::Type{Tx}, hLen, xLen, factor )
-    h = rand( Th, hLen )
-    h = isreal(h[1]) ? h : real(h).+im
-    x = rand( Tx, xLen )
-    xx = upsample( x, factor )
+function test_interpolate( h, x, interpolation )
+    xLen = length( x )
+    x1 = x[1:ifloor( xLen/4 )]
+    x2 = x[ifloor( xLen/4 )+1:end]
     
-    nativeResult = Multirate.interpolate( h, x, factor )
-    baseResult   = Base.filt( h, one(Th), xx )
-    
-    areApprox( nativeResult, baseResult )
-end
+    @printf( "\nTesting interpolation")
 
-
-function short_interpolate_test( h, x, factor )    
-    @printf( "Multirate's stateless interpolate\n\t")
-    @time statelessResult = Multirate.interpolate( h, x, factor )
-    
-    @printf( "Multirate's stateful interpolate\n\t")
-    self = Multirate.FIRFilter( h, factor//1 )
-    x1   = x[ 1:int(floor(length(x)) * 0.25) ]
-    x2   = x[ length(x1)+1: end ]
+    @printf( "\n\tNaive interpolation\n\t\t")
     @time begin
-        y1 = Multirate.filt( self, x1 )
-        y2 = Multirate.filt( self, x2 )
-    end    
-    statefulResult = append!( y1, y2 )
-    
-    @printf( "Naive interpolate\n\t")
-    @time begin
-        xx = zeros( eltype(x), length(x) * factor )
-        for n = 0:length(x)-1;
-            xx[ n*factor+1 ] = x[ n+1 ]
+        xZeroStuffed = zeros( eltype(x), xLen * interpolation )
+        for n = 0:xLen-1;
+            xZeroStuffed[ n*interpolation+1 ] = x[ n+1 ]
         end
-        naiveResult = Base.filt( h, one(eltype(h)), xx )        
+        naiveResult = Base.filt( h, one(eltype(h)), xZeroStuffed )        
     end
     
-    # display( [ naiveResult statelessResult statefulResult ] )
+    @printf( "\n\tMultirate's stateful interpolation\n\t\t")
+    self = Multirate.FIRFilter( h, interpolation//1 )
+    @time begin
+        y1 = Multirate.filt( self, x1 )
+        y2 = Multirate.filt( self, x2 )        
+    end
+    statefulResult = append!( y1, y2 )
     
-    areApprox( naiveResult, statelessResult ) & areApprox( naiveResult, statefulResult )
+    areApprox( statefulResult, naiveResult )
 end
 
-#=============================
-h      = complex64(rand( 10 ));
-x      = rand( Complex64, 100_000 );
-factor = 4;
 
-short_interpolate_test( h, x, factor )
-=============================#
 
 
 #==============================================================================#
@@ -207,28 +135,33 @@ function short_rational_test( h, x, ratio )
     @printf( "Naive resampling\n\t")
     @time begin
         xx         = zeros( length(x) * upfactor );
-        baseResult = similar( x, int( ceil( length(x) * ratio )))
+        naiveResult = similar( x, int( ceil( length(x) * ratio )))
         
         for n = 0:length(x)-1;
             xx[ n*upfactor+1 ] = x[ n+1 ];
         end
         
-        baseResultInterpolated = Base.filt( h, 1.0, xx );
-        baseResult = [ baseResultInterpolated[n] for n = 1:downfactor:length( baseResultInterpolated ) ]
+        naiveResultInterpolated = Base.filt( h, 1.0, xx );
+        naiveResult = [ naiveResultInterpolated[n] for n = 1:downfactor:length( naiveResultInterpolated ) ]
     end
 
-    if areApprox( statelessResult, baseResult ) && areApprox( statefulResult, baseResult )
+    if areApprox( statelessResult, naiveResult ) && areApprox( statefulResult, naiveResult )
         return true
     else
-        display( [ baseResult statelessResult statefulResult ] )
+        display( [ naiveResult statelessResult statefulResult ] )
         return false
     end
     
 end
 
-#=========================
-ratio = 7//3;
-h     = rand( 15 );
-x     = rand( int(100e3) );
-short_rational_test( h, x, ratio )
-=========================#
+h = rand( 25 );
+x = rand( int(1e6) );
+# h = Float64[10:-1:1];
+# x = Float64[1:100];
+@test test_singlerate( h, x );
+
+decimation = 7
+@test test_decimate( h, x, decimation );
+
+interpolation = 7
+@test test_interpolate( h, x, interpolation )
