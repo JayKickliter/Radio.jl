@@ -301,21 +301,21 @@ end
 function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rational; dlyLine::Vector{T} = T[], xStartIdx = 1, φIdx = 1 )
 
     (tapsPerφ, Nφ) = size( pfb )
-    self.kernel.interpolation  = num( ratio )
+    interpolation  = num( ratio )
     decimation     = den( ratio )
     xOffset        = xStartIdx - 1
     xLen           = length( x ) - xOffset
     bufLen         = length( buffer )
     outLen         = outputlength( ratio, xLen, φIdx )
     criticalYidx   = min( int(floor( tapsPerφ * ratio )), outLen )
-    φIdxStepSize   = mod( decimation, self.kernel.interpolation )
+    φIdxStepSize   = mod( decimation, interpolation )
     criticalφIdx   = Nφ - φIdxStepSize
     reqDlyLineLen  = tapsPerφ - 1
     dlyLine        = length( dlyLine ) == 0 ? zeros( T, reqDlyLineLen ) : dlyLine
     dlyLineLen     = length( dlyLine )
 
     1 <= xStartIdx <= length( x ) || error( "xStartIdx must be >= 1 and =< length( x ) " )
-    bufLen >= outLen              || error( "length( buffer ) must be >= iceil(  xLen * self.kernel.interpolation / decimation  )")
+    bufLen >= outLen              || error( "length( buffer ) must be >= iceil(  xLen * interpolation / decimation  )")
     dlyLineLen == reqDlyLineLen   || error( "the optional parameter dlyLine, if provided, must a length of size(pfb)[1]-1")
 
     pfb = flipud( pfb )
@@ -338,7 +338,7 @@ function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rati
 
         inputIdxLast = inputIdx                                                             # TODO: get rid of need to store last
         φIdxLast     = φIdx                                                                 # TODO: get rid of need to store last
-        inputIdx    += int( floor( ( φIdx + decimation - 1 ) / self.kernel.interpolation ) )
+        inputIdx    += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
         φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize #
 
         buffer[ yIdx ] = accumulator
@@ -354,7 +354,7 @@ function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rati
 
         inputIdxLast   = inputIdx                                                           # TODO: get rid of need to store last
         φIdxLast       = φIdx                                                               # TODO: get rid of need to store last
-        inputIdx      += int( floor( ( φIdx + decimation - 1 ) / self.kernel.interpolation ) )
+        inputIdx      += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
         φIdx           = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize
         buffer[ yIdx ] = accumulator
     end
