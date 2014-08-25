@@ -21,6 +21,7 @@ abstract FIRKernel
 # Single rate FIR kernel, just hold filter h
 type FIRStandard <: FIRKernel
     h::Vector
+    hLen::Int
 end
 
 # Interpolator FIR kernel
@@ -59,7 +60,9 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
 
     if resampleRatio == 1                                     # single-rate
         reqDlyLineLen = length( h ) - 1
-        kernel        = FIRStandard( h )
+        h             = flipud( h )
+        hLen          = length( h )
+        kernel        = FIRStandard( h, hLen )
     elseif interpolation == 1                                 # decimate
         reqDlyLineLen = max( decimation-1, length(h)-1 )
         kernel        = FIRDecimator( h, decimation )
@@ -149,7 +152,7 @@ end
 #   resampling ratio, input length, and initial phase of the filter bank.
 #
 # It's hard to explain how this works without a diagram.
-                                                            
+
 function outputlength( ratio::Rational, inputLen, φ = 1 )
     interpolation = num( ratio )
     decimation    = den( ratio )
@@ -164,79 +167,56 @@ end
 #               ___] | | \| |__] |___ |___    |  \ |  |  |  |___               #
 #==============================================================================#
 
-# Stateless single-rate filtering with pre-allocated buffer
-function filt!{T}( buffer::Vector{T}, h::Vector{T}, x::Vector{T}, dlyLine::Vector{T} = T[] )
-
-    bufLen        = length( buffer )
-    xLen          = length( x )
-    hLen          = length( h )
-    dlyLineLen    = length( dlyLine )
-    reqDlyLineLen = hLen - 1
+# Stateful single-rate filtering with pre-allocated buffer
+function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T} )
+    dlyLine::Vector{T} = self.dlyLine
+    h::Vector{T}       = self.kernel.h
+    hLen               = self.kernel.hLen
+    reqDlyLineLen      = self.reqDlyLineLen
+    bufLen             = length( buffer )
+    xLen               = length( x )
+    outLen             = xLen
+    criticalYidx       = min( hLen, outLen )
 
     bufLen >= xLen || error( "buffer length must be >= x length" )
 
-    if dlyLineLen != reqDlyLineLen
-        if dlyLineLen == 0
-            dlyLine = zeros( T, reqDlyLineLen )
-        elseif dlyLineLen < reqDlyLineLen
-            dlyLine = [ zeros( T, reqDlyLineLen ), dlyLine ] # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
-        else
-            dlyLine = dlyLine[ end+1-reqDlyLineLen:end ]
+    for yIdx in 1:criticalYidx                                   # this first loop takes care of filter ramp up and previous dlyLine
+        accumulator = zero(T)
+
+        for k in 1:hLen-yIdx
+            @inbounds accumulator += h[k] * dlyLine[k+yIdx-1]
         end
+
+        for k in 1:yIdx
+            @inbounds accumulator += h[hLen-yIdx+k] * x[k]
+        end
+
+        @inbounds buffer[yIdx] = accumulator
     end
 
-    h = flipud( h )                                          # flip the h to make the multiplication more SIMD friendly
-
-    for bufIdx in 1:hLen-1                                   # this first loop takes care of filter ramp up and previous dlyLine
-
+    for yIdx in criticalYidx+1:xLen
         accumulator = zero(T)
-        hIdx        = 1
 
-        for dlyLineIdx in bufIdx:dlyLineLen                  # dot( h[1:end-bufIdx], dlyLine[bufIdx:end] )
-            @inbounds accumulator += h[hIdx] * dlyLine[dlyLineIdx]
-            hIdx += 1
+        for k in 1:hLen
+            @inbounds accumulator += h[k] * x[k+yIdx-1]
         end
 
-        hIdx = hLen-bufIdx+1
-        for xIdx in 1:bufIdx                                 # dot( h[end-bufIdx+1:end], x[1:bufIdx] )
-            @inbounds accumulator += h[hIdx] * x[xIdx]
-            hIdx += 1
-        end
-
-        @inbounds buffer[bufIdx] = accumulator
+        @inbounds buffer[yIdx] = accumulator
     end
 
-    for bufIdx in hLen:xLen
-
-        accumulator = zero(T)
-        xIdx        = bufIdx-hLen+1
-
-        @simd for hIdx in 1:hLen                             # dot( h[1:end], x[end-hIdx+1:end] )
-            @inbounds accumulator += h[hIdx] * x[xIdx]
-            xIdx += 1
-        end
-
-        @inbounds buffer[bufIdx] = accumulator
+    if xLen >= reqDlyLineLen
+        self.dlyLine = x[end-reqDlyLineLen+1:end]
+    else
+        self.dlyLine = [ dlyLine, x ][end-reqDlyLineLen+1:end]
     end
 
     return buffer
 end
 
-# Stateless not-in-place single rate filtering
-filt{T}( h::Vector{T}, x::Vector{T}, dlyLine::Vector{T} = T[] ) = filt!( similar(x), h, x, dlyLine )
-
-# Stateful single-rate filtering
-function filt( self::FIRFilter{FIRStandard}, x ) # FIXME: Just realized that this filt operation doesn't check the input lenth
-    h            = self.kernel.h
-    hLen         = length( h )
-    nextDlyLine  = x[ end - self.reqDlyLineLen + 1 : end ]
-    y            = filt( self.kernel.h, x, self.dlyLine )
-    self.dlyLine = nextDlyLine
-
-    return y
+function filt{T}( self::FIRFilter{FIRStandard}, x::Vector{T} )
+    buffer = zeros( eltype(x), length(x) )
+    filt!( buffer, self, x )
 end
-
-
 
 
 #==============================================================================#
@@ -245,7 +225,7 @@ end
 #               | | \|  |  |___ |  \ |    |___ |__| |  |  |  |___              #
 #==============================================================================#
 
-function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vector{T} )    
+function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vector{T} )
     pfb::PFB{T}        = self.kernel.pfb
     dlyLine::Vector{T} = self.dlyLine
     interpolation      = self.kernel.interpolation
@@ -289,13 +269,13 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
         @inbounds buffer[yIdx]  = accumulator
         (φ, inputIdx) = φ == Nφ ? ( 1, inputIdx+1 ) : ( φ+1, inputIdx )
     end
-    
+
     if xLen >= reqDlyLineLen
         self.dlyLine = x[end-reqDlyLineLen+1:end]
     else
         self.dlyLine = [ dlyLine, x ][end-reqDlyLineLen+1:end]
     end
-    
+
     return buffer
 end
 
@@ -357,7 +337,7 @@ function resample!{T}( buffer::Vector{T}, pfb::PFB{T}, x::Vector{T}, ratio::Rati
         inputIdxLast = inputIdx                                                             # TODO: get rid of need to store last
         φIdxLast     = φIdx                                                                 # TODO: get rid of need to store last
         inputIdx    += int( floor( ( φIdx + decimation - 1 ) / self.kernel.interpolation ) )
-        φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize # 
+        φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize #
 
         buffer[ yIdx ] = accumulator
     end
