@@ -1,4 +1,4 @@
-reload("/Users/jaykickliter/.julia/v0.4/Radio/src/Filter/FIRFilter.jl")
+reload("/Users/jkickliter/.julia/v0.4/Radio/src/Filter/FIRFilter.jl")
 
 using Base.Test
 import Multirate
@@ -16,21 +16,33 @@ import Multirate
 function test_singlerate( h, x )
     @printf( "\nTesting single rate")
     xLen = length( x )
-    x1 = x[ 1 : ifloor( xLen/4 ) ]
-    x2 = x[ ifloor( xLen/4)+1 : end ]    
+    pivotPoint = min( 100, ifloor( xLen/4 ))
+    x1 = x[ 1 : pivotPoint ]
+    x2 = x[ pivotPoint+1 : end ]    
 
     @printf( "\n\tBase's filt\n\t\t")
     @time naiveResult = Base.filt( h, 1.0, x )
     
     @printf( "\n\tMultirate's stateful filt\n\t\t")
-    self = Multirate.FIRFilter( h, 1//1 )    
+    self = Multirate.FIRFilter( h, 1//1 )
     @time begin
-        y1 = Multirate.filt( self, x1 )        
+        y1 = Multirate.filt( self, x1 )
         y2 = Multirate.filt( self, x2 )
     end
-    statefulResult = append!( y1, y2 )        
+    statefulResult = [ y1, y2 ]
+    
+    @printf( "\n\tMultirate's stateful filt. Piecewise for first %d inpouts\n\t\t", length( x1 ) )
+    Multirate.reset( self )
+    @time begin
+        for i in 1:length(x1)
+            y1[i] = Multirate.filt( self, x1[i:i] )[1]
+        end
+        y2 = Multirate.filt( self, x2 )
+    end
+    piecewiseResult = [ y1, y2 ]
+    
 
-    areApprox( statefulResult, naiveResult )
+    areApprox( statefulResult, naiveResult ) && areApprox( piecewiseResult, naiveResult )
 end
 
 
@@ -45,8 +57,9 @@ end
 function test_decimate( h, x, decimation )
     @printf( "\nTesting decimation")
     xLen = length( x )
-    x1 = x[ 1 : ifloor( xLen/4 ) ]
-    x2 = x[ ifloor( xLen/4)+1 : end ]
+    pivotPoint = min( 100, ifloor( xLen/4 ))
+    x1 = x[ 1 : pivotPoint ]
+    x2 = x[ pivotPoint+1 : end ]    
     
     @printf( "\n\tNaive decimation\n\t\t")
     @time begin
@@ -59,11 +72,21 @@ function test_decimate( h, x, decimation )
     @time begin
         y1 = Multirate.filt( self, x1 )
         y2 = Multirate.filt( self, x2 )
-    end
+    end    
+    statefulResult = [ y1, y2 ]
     
-    statefulResult = append!( y1, y2 )
+    @printf( "\n\tMultirate's stateful decimation. Piecewise for first %d inpouts\n\t\t", length( x1 ) )
+    Multirate.reset( self )
+    y1 = similar( x, 0 )
+    @time begin
+        for i in 1:length(x1)
+            append!( y1, Multirate.filt( self, x1[i:i] ) )
+        end
+        y2 = Multirate.filt( self, x2 )
+    end
+    piecewiseResult = [ y1, y2 ]
 
-    areApprox( naiveResult, statefulResult )
+    areApprox( naiveResult, statefulResult ) && areApprox( piecewiseResult, naiveResult )
 end
 
 
@@ -77,8 +100,9 @@ end
 
 function test_interpolate( h, x, interpolation )
     xLen = length( x )
-    x1 = x[1:ifloor( xLen/4 )]
-    x2 = x[ifloor( xLen/4 )+1:end]
+    pivotPoint = min( 100, ifloor( xLen/4 ))
+    x1 = x[ 1 : pivotPoint ]
+    x2 = x[ pivotPoint+1 : end ]    
     
     @printf( "\nTesting interpolation")
 
@@ -97,9 +121,20 @@ function test_interpolate( h, x, interpolation )
         y1 = Multirate.filt( self, x1 )
         y2 = Multirate.filt( self, x2 )        
     end
-    statefulResult = append!( y1, y2 )
+    statefulResult = [ y1, y2 ]
     
-    areApprox( statefulResult, naiveResult )
+    @printf( "\n\tMultirate's stateful interpolation. Piecewise for first %d inpouts\n\t\t", length( x1 ) )
+    Multirate.reset( self )
+    y1 = similar( x, 0 )
+    @time begin
+        for i in 1:length(x1)
+            append!( y1, Multirate.filt( self, x1[i:i] ) )
+        end
+        y2 = Multirate.filt( self, x2 )
+    end
+    piecewiseResult = [ y1, y2 ]
+
+    areApprox( naiveResult, statefulResult ) && areApprox( piecewiseResult, naiveResult )    
 end
 
 
@@ -158,10 +193,20 @@ h = rand( 25 );
 x = rand( int(1e6) );
 # h = Float64[10:-1:1];
 # x = Float64[1:100];
+Th = eltype( h )
+Tx = eltype( x )
+
+Multirate.filt( Multirate.FIRFilter( h ), x[1:min(100, length(x))]);
 @test test_singlerate( h, x );
 
-decimation = 7
+decimation = 9
+Multirate.filt( Multirate.FIRFilter( h, 1//decimation ), x[1:min(100, length(x))]);
 @test test_decimate( h, x, decimation );
 
 interpolation = 7
+Multirate.filt( Multirate.FIRFilter( h, interpolation//1 ), x[1:min(100, length(x))]);
 @test test_interpolate( h, x, interpolation )
+
+Multirate.filt( Multirate.FIRFilter( h, interpolation//decimation ), x[1:min(100, length(x))]);
+@test test_interpolate( h, x, interpolation )
+
