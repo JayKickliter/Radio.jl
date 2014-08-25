@@ -35,6 +35,7 @@ end
 # Decimator FIR kernel
 type FIRDecimator <: FIRKernel
     h::Vector
+    hLen::Int
     decimation::Int
 end
 
@@ -57,15 +58,16 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     interpolation = num( resampleRatio )
     decimation    = den( resampleRatio )
     reqDlyLineLen = 0
+    hLen          = length( h )
 
     if resampleRatio == 1                                     # single-rate
         reqDlyLineLen = length( h ) - 1
         h             = flipud( h )
-        hLen          = length( h )
         kernel        = FIRStandard( h, hLen )
     elseif interpolation == 1                                 # decimate
         reqDlyLineLen = max( decimation-1, length(h)-1 )
-        kernel        = FIRDecimator( h, decimation )
+        h             = flipud( h )
+        kernel        = FIRDecimator( h, hLen, decimation )
     elseif decimation == 1                                    # interpolate
         pfb              = flipud(polyize( h, interpolation ))
         ( tapsPerφ, Nφ ) = size( pfb )
@@ -198,7 +200,7 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
         accumulator = zero(T)
 
         for k in 1:hLen
-            @inbounds accumulator += h[k] * x[k+yIdx-1]
+            @inbounds accumulator += h[k] * x[yIdx-hLen+k]
         end
 
         @inbounds buffer[yIdx] = accumulator
@@ -413,100 +415,75 @@ end
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-# Stateless in-place decimation with pre-allocted buffer
-function decimate!{T}( buffer::AbstractVector{T}, h::AbstractVector{T}, x::AbstractVector{T}, decimation::Integer, dlyLine::AbstractVector{T} = T[]; xStartIdx = 1 )
+# Stateful decimation
+function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T} )
+    h::Vector{T}       = self.kernel.h
+    dlyLine::Vector{T} = self.dlyLine
+    xLen               = length( x )
+    dlyLineLen         = length( dlyLine )
+    reqDlyLineLen      = self.reqDlyLineLen
 
-    xOffset       = xStartIdx - 1
-    xLen          = length( x ) - xOffset
-    hLen          = length( h )
-    reqDlyLineLen = hLen-1
-    dlyLineLen    = length( dlyLine )
-    outLen        = int( ceil( xLen / decimation ))
-    criticalYidx  = min( int(ceil(hLen / decimation)), outLen )
-
-    1 <= xStartIdx <= length( x ) || error( "xStartIdx must be >= 1 and =< length( x ) " )
-    length( buffer ) >= outLen    || error( "length(buffer) must be >= floor( ( length(x) ) / decimation)" )
-
-    if dlyLineLen != reqDlyLineLen
-        if dlyLineLen == 0
-            dlyLine = zeros( T, reqDlyLineLen )
-        elseif dlyLineLen < reqDlyLineLen
-            dlyLine = prepend!( dlyLine, zeros(  T, reqDlyLineLen - dlyLineLen ) ) # TODO: write the filtering logic to not depends on dlyLine being a certain length, as the current implementation allocates useless zeros
-        else
-            dlyLine = dlyLine[ end+1-reqDlyLineLen:end ]
-        end
-        dlyLineLen = length( dlyLine )
+    if xLen + dlyLineLen  < reqDlyLineLen
+        append!( dlyLine, x )
+        return T[]
     end
 
-    h = flipud(h)                                                                  # TODO: figure out a way to not always have to flip taps each time
-    inputIdx = 1                                                                   # inputIdx is is the current input, not the actual index of of the current x in the delay line
-    for yIdx in 1:criticalYidx                                                     # Filtering is broken up into two outer loops
-                                                                                   # This first loop takes care of filter ramp up.
-        hIdx        = 1
+    decimation   = self.kernel.decimation
+    xStartIdx    = reqDlyLineLen - dlyLineLen + 1
+    xOffset      = xStartIdx - 1
+    xLen         = length( x ) - xOffset
+    hLen         = self.kernel.hLen
+    outLen       = int( ceil( xLen / decimation ))
+    # buffer       = similar( x, outLen )
+    criticalYidx = min( int(ceil(hLen / decimation)), outLen ) #
+    dlyLine      = [ dlyLine, x[1:xStartIdx-1] ]
+
+    inputIdx = 1                                               # inputIdx is is the current input, not the actual index of of the current x in the delay line
+    for yIdx in 1:criticalYidx                                 # Filtering is broken up into two outer loops
+        hIdx        = 1                                        # This first loop takes care of filter ramp up.
         accumulator = zero(T)
 
-        for dlyLineIdx in inputIdx:dlyLineLen                                      # Inner Loop 1: Handles convolution of taps and delay line
-            accumulator += h[hIdx] * dlyLine[dlyLineIdx]
+        for dlyLineIdx in inputIdx:reqDlyLineLen               # Inner Loop 1: Handles convolution of taps and delay line
+            @inbounds accumulator += h[hIdx] * dlyLine[dlyLineIdx]
             hIdx += 1
         end
 
-        for k in 1:inputIdx                                                        # Inner Loop 2: handles convolution of taps and x
-            accumulator += h[ hIdx ] * x[ k + xOffset ]
+        for k in 1:inputIdx                                    # Inner Loop 2: handles convolution of taps and x
+            @inbounds accumulator += h[ hIdx ] * x[ k + xOffset ]
             hIdx += 1
         end
 
-        buffer[yIdx] = accumulator
+        @inbounds buffer[yIdx] = accumulator
         inputIdx += decimation
     end
 
     inputIdx -= hLen
 
-    for yIdx in criticalYidx+1:outLen                                              # second outer loop, we are now in the clear to to convolve without x[inputIdx-]
+    for yIdx in criticalYidx+1:outLen                          # second outer loop, we are now in the clear to to convolve without going out of bounds
         accumulator  = zero(T)
 
         for k in 1:hLen
-            accumulator += h[ k ] * x[ inputIdx + k + xOffset ]
+            @inbounds accumulator += h[ k ] * x[ inputIdx + k + xOffset ]
         end
 
-        buffer[yIdx] = accumulator
+        @inbounds buffer[yIdx] = accumulator
         inputIdx += decimation
     end
-
     inputIdx += hLen - decimation
+
     xLeftoverLen = max( xLen - inputIdx, 0 )
+    dlyLineLen   = reqDlyLineLen - decimation + xLeftoverLen + 1
+    self.dlyLine = [ dlyLine, x[xStartIdx:end]][end-dlyLineLen+1:end]
 
-    return buffer, xLeftoverLen                                                    # TODO: return number of elements written to buffer
+    return buffer
 end
 
-# Not in-place stateless decimation
-function decimate{T}( h::Vector{T}, x::AbstractVector{T}, decimation::Integer, dlyLine::Vector{T} = T[]; xStartIdx = 1 )
-    xLen   = length( x ) - xStartIdx + 1
-    buffer = similar( x, int(ceil( xLen / decimation )) )
-    decimate!( buffer, h, x, decimation, dlyLine, xStartIdx = xStartIdx )
-end
-
-# Stateful decimation
 function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
-    xLen          = length( x )
-    h             = self.kernel.h
-    decimation    = self.kernel.decimation
-    dlyLine       = self.dlyLine
-    dlyLineLen    = length( dlyLine )
-    reqDlyLineLen = self.reqDlyLineLen
-    combinedLen   = dlyLineLen + xLen
-    y             = T[]
-
-    if combinedLen > reqDlyLineLen
-        xStartIdx         = reqDlyLineLen - dlyLineLen + 1
-        self.dlyLine      = [ dlyLine, x[1:xStartIdx-1] ]
-        (y, xLeftoverLen) = decimate( h, x, decimation, self.dlyLine; xStartIdx = xStartIdx )
-        nextDlyLineLen    = reqDlyLineLen - decimation + 1 + xLeftoverLen
-        self.dlyLine      = [ self.dlyLine, x[xStartIdx:end] ][end-nextDlyLineLen+1:end] # TODO: Make this so it isn't doing so much coping for large x vectors
-    else
-        append!( dlyLine, x )
-    end
-
-    return y
+    xLen       = length( x ) - self.reqDlyLineLen + length( self.dlyLine )
+    outLen     = int( ceil( xLen / self.kernel.decimation ))
+    buffer     = similar( x, outLen )
+    filt!( buffer, self, x )
 end
+
 
 end # module
