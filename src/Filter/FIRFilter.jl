@@ -42,7 +42,7 @@ end
 # Rational resampler FIR kernel
 type FIRRational  <: FIRKernel
     pfb::PFB
-    ratio::Rational
+    ratio::Rational{Int}
     Nφ::Int
     tapsPerφ::Int
     criticalYidx::Int
@@ -162,7 +162,7 @@ function outputlength( self::FIRFilter{FIRRational}, x::Vector )
     effectiveLen  = max( xLen - self.reqDlyLineLen + length( self.dlyLine ), 0 )
     interpolation = num( self.kernel.ratio )
     decimation    = den( self.kernel.ratio )
-    outLen        = (( effectiveLen * interpolation ) - φ + 1 ) / decimation
+    outLen        = (( effectiveLen * interpolation ) - self.kernel.φIdx + 1 ) / decimation
     iceil(  outLen  )
 end
 
@@ -173,7 +173,6 @@ end
 #               ___] | | \| |__] |___ |___    |  \ |  |  |  |___               #
 #==============================================================================#
 
-# Stateful single-rate filtering with pre-allocated buffer
 function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T} )
     dlyLine::Vector{T} = self.dlyLine
     h::Vector{T}       = self.kernel.h
@@ -302,14 +301,14 @@ end
 #==============================================================================#
 
 function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T} )
-    xLen          = length( x )
-    pfb           = self.kernel.pfb
-    ratio         = self.kernel.ratio
-    dlyLine       = self.dlyLine
-    dlyLineLen    = length( dlyLine )
-    φIdx          = self.kernel.φIdx
-    reqDlyLineLen = self.reqDlyLineLen
-    combinedLen   = dlyLineLen + xLen
+    xLen               = length( x )
+    pfb::PFB{T}        = self.kernel.pfb
+    ratio              = self.kernel.ratio
+    dlyLine::Vector{T} = self.dlyLine
+    dlyLineLen         = length( dlyLine )
+    φIdx               = self.kernel.φIdx
+    reqDlyLineLen      = self.reqDlyLineLen
+    combinedLen        = dlyLineLen + xLen
 
     if combinedLen <= reqDlyLineLen
         append!( dlyLine, x )
@@ -338,49 +337,60 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
         accumulator = zero(T)
 
         for k in 1:tapsPerφ-inputIdx
-            accumulator += pfb[ k, φIdx ] * dlyLine[ k+inputIdx-1]
+            @inbounds accumulator += pfb[ k, φIdx ] * dlyLine[ k+inputIdx-1]
         end
 
         for k in 1:inputIdx
-            accumulator += pfb[ end-inputIdx+k, φIdx ] * x[ k+xOffset ]
+            @inbounds accumulator += pfb[ end-inputIdx+k, φIdx ] * x[ k+xOffset ]
         end
 
         inputIdxLast = inputIdx                                                             # TODO: get rid of need to store last
         φIdxLast     = φIdx                                                                 # TODO: get rid of need to store last
-        inputIdx    += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
-        φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize #
+        inputIdx    += ifloor( ( φIdx + decimation - 1 ) / interpolation )
+        φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize # 
 
-        buffer[ yIdx ] = accumulator
+        @inbounds buffer[ yIdx ] = accumulator
     end
 
     for yIdx in criticalYidx+1:outLen
         accumulator = zero(T)
-        xFirstIdx   = inputIdx-tapsPerφ                                                     # this is actually ones less than the input of our first, with k added below it is the actuall index
+        xFirstIdx::Int   = inputIdx-tapsPerφ+xOffset                                        # this is actually ones less than the input of our first, with k added below it is the actuall index
 
         for k in 1:tapsPerφ
-            accumulator += pfb[k, φIdx] * x[ k + xFirstIdx + xOffset ]
+            @inbounds accumulator += pfb[k, φIdx] * x[ k + xFirstIdx ]
         end
 
-        inputIdxLast   = inputIdx                                                           # TODO: get rid of need to store last
-        φIdxLast       = φIdx                                                               # TODO: get rid of need to store last
-        inputIdx      += int( floor( ( φIdx + decimation - 1 ) / interpolation ) )
-        φIdx           = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize
-        buffer[ yIdx ] = accumulator
+        inputIdxLast = inputIdx                                                             # TODO: get rid of need to store last
+        φIdxLast     = φIdx                                                                 # TODO: get rid of need to store last
+        inputIdx    += ifloor( ( φIdx + decimation - 1 ) / interpolation )
+        φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize
+
+        @inbounds buffer[ yIdx ] = accumulator
     end
 
     xLeftoverLen     = length( x ) - xOffset - inputIdxLast
     sampleDeficit    = inputIdx - inputIdxLast - xLeftoverLen
     dlyLineLen       = reqDlyLineLen - sampleDeficit + 1
-    self.dlyLine     = [ dlyLine, x[xStartIdx:end] ][end-dlyLineLen+1:end]
     self.kernel.φIdx = φIdx
+
+    if length( x ) >= reqDlyLineLen
+        self.dlyLine = x[end-dlyLineLen+1:end]
+    else
+        self.dlyLine = [ dlyLine, x[xStartIdx:end] ][end-dlyLineLen+1:end]
+    end
 
     return outLen
 end
 
 function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
-    outLen = outputlength( self, x )
+    if ( outLen = outputlength( self, x ) ) == 0
+        append!( self.dlyLine, x )
+        return T[]
+    end
+
     buffer = similar( x, outLen )
     filt!( buffer, self, x )
+
     return buffer
 end
 
@@ -393,7 +403,6 @@ end
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-# Stateful decimation
 function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T} )
     h::Vector{T}       = self.kernel.h
     dlyLine::Vector{T} = self.dlyLine
