@@ -45,6 +45,7 @@ type FIRRational  <: FIRKernel
     ratio::Rational
     Nφ::Int
     tapsPerφ::Int
+    criticalYidx::Int
     φIdx::Int
 end
 
@@ -74,10 +75,11 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
         reqDlyLineLen    = tapsPerφ - 1
         kernel           = FIRInterpolator( pfb, interpolation, Nφ, tapsPerφ )
     else                                                      # rational
-        pfb              = polyize( h, interpolation )
+        pfb              = flipud(polyize( h, interpolation ))
         ( tapsPerφ, Nφ ) = size( pfb )
         reqDlyLineLen    = tapsPerφ - 1
-        kernel           = FIRRational( pfb, resampleRatio, Nφ, tapsPerφ, 1 )
+        criticalYidx     = ifloor( tapsPerφ * resampleRatio )
+        kernel           = FIRRational( pfb, resampleRatio, Nφ, tapsPerφ, criticalYidx, 1 )
     end
 
     dlyLine = zeros( eltype( h ), reqDlyLineLen )
@@ -150,15 +152,17 @@ end
 #               |__| |__|  |  |    |__|  |     |___ |___ | \|                  #
 #==============================================================================#
 
-# Calculates the resulting length of a multirate filtering operation, given
-#   resampling ratio, input length, and initial phase of the filter bank.
+# Calculates the resulting length of a multirate filtering operation, given a
+#   FIRFilter{FIRRational} object and an input vector
 #
-# It's hard to explain how this works without a diagram.
+# ( It's hard to explain how this works without a diagram )
 
-function outputlength( ratio::Rational, inputLen, φ = 1 )
-    interpolation = num( ratio )
-    decimation    = den( ratio )
-    outLen        = (( inputLen * interpolation ) - φ + 1 ) / decimation
+function outputlength( self::FIRFilter{FIRRational}, x::Vector )
+    xLen          = length( x )
+    effectiveLen  = max( xLen - self.reqDlyLineLen + length( self.dlyLine ), 0 )
+    interpolation = num( self.kernel.ratio )
+    decimation    = den( self.kernel.ratio )
+    outLen        = (( effectiveLen * interpolation ) - φ + 1 ) / decimation
     iceil(  outLen  )
 end
 
@@ -309,20 +313,20 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
 
     if combinedLen <= reqDlyLineLen
         append!( dlyLine, x )
-        return T[]
+        return buffer, 0
     end
 
     xStartIdx     = reqDlyLineLen - dlyLineLen + 1
     xOffset       = xStartIdx - 1
     xLen          = length( x ) - xOffset
-    outLen        = outputlength( ratio, xLen, φIdx )
+    outLen        = outputlength( self, x )
     dlyLine       = [ dlyLine, x[1:xStartIdx-1] ]
-    criticalYidx  = min( ifloor( self.kernel.tapsPerφ * ratio ), outLen )
+    tapsPerφ      = self.kernel.tapsPerφ
+    criticalYidx  = min( self.kernel.criticalYidx, outLen )
     interpolation = num( ratio )
     decimation    = den( ratio )
     φIdxStepSize  = mod( decimation, interpolation )
     Nφ            = self.kernel.Nφ
-    tapsPerφ      = self.kernel.tapsPerφ
     criticalφIdx  = Nφ - φIdxStepSize
 
     yIdx         = 0
@@ -366,18 +370,18 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
 
     xLeftoverLen     = length( x ) - xOffset - inputIdxLast
     sampleDeficit    = inputIdx - inputIdxLast - xLeftoverLen
-    dlyLineLen       = reqDlyLineLen - sampleDeficit + 1    
+    dlyLineLen       = reqDlyLineLen - sampleDeficit + 1
     self.dlyLine     = [ dlyLine, x[xStartIdx:end] ][end-dlyLineLen+1:end]
     self.kernel.φIdx = φIdx
-    
-    return buffer
+
+    return outLen
 end
 
 function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
-    xLen   = max( length( x ) - self.reqDlyLineLen + length( self.dlyLine ), 0 )
-    outLen = outputlength( self.kernel.ratio, xLen, self.kernel.φIdx )
+    outLen = outputlength( self, x )
     buffer = similar( x, outLen )
-    filt!( buffer, self, x )        
+    filt!( buffer, self, x )
+    return buffer
 end
 
 
