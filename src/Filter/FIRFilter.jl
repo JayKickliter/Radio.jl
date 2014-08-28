@@ -47,6 +47,8 @@ type FIRRational  <: FIRKernel
     tapsPerφ::Int
     criticalYidx::Int
     φIdx::Int
+    yCount::Int
+    xCount::Int
 end
 
 type FIRFilter{Tk<:FIRKernel} <: Filter
@@ -79,7 +81,7 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
         ( tapsPerφ, Nφ ) = size( pfb )
         reqDlyLineLen    = tapsPerφ - 1
         criticalYidx     = ifloor( tapsPerφ * resampleRatio )
-        kernel           = FIRRational( pfb, resampleRatio, Nφ, tapsPerφ, criticalYidx, 1 )
+        kernel           = FIRRational( pfb, resampleRatio, Nφ, tapsPerφ, criticalYidx, 1, 0, 0 )
     end
 
     dlyLine = zeros( eltype( h ), reqDlyLineLen )
@@ -157,13 +159,15 @@ end
 #
 # ( It's hard to explain how this works without a diagram )
 
-function outputlength( self::FIRFilter{FIRRational}, x::Vector )
-    xLen          = length( x )
-    effectiveLen  = max( xLen - self.reqDlyLineLen + length( self.dlyLine ), 0 )
-    interpolation = num( self.kernel.ratio )
-    decimation    = den( self.kernel.ratio )
-    outLen        = (( effectiveLen * interpolation ) - self.kernel.φIdx + 1 ) / decimation
+function outputlength( inputlength::Integer, ratio::Rational, initialφ::Integer )
+    interpolation = num( ratio )
+    decimation    = den( ratio )
+    outLen        = (( inputlength * interpolation ) - initialφ + 1 ) / decimation
     iceil(  outLen  )
+end
+
+function inputindex( outputindex::Integer, ratio::Rational )
+    ifloor( (outputindex*den(ratio)) / num(ratio) )
 end
 
 
@@ -300,96 +304,94 @@ end
 #           |  \ |  |  |  .   |  \ |___ ___] |  | |  | |    |___ |___          #
 #==============================================================================#
 
-function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T} )
-    xLen               = length( x )
-    pfb::PFB{T}        = self.kernel.pfb
-    ratio              = self.kernel.ratio
+function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
+    kernel = self.kernel
+    xLen   = length( x )
+
+    # println()
+    # println( "filt" )
+    # println( "    yCount = $(kernel.yCount), xCount = $(kernel.xCount)" )
+    # println( "    self.dlyLine = $(self.dlyLine.')")
+    
+    # println( "    if $(kernel.xCount) + $xLen < $(inputindex( kernel.yCount, kernel.ratio ) + 1)" )
+    if kernel.xCount + xLen < inputindex( kernel.yCount, kernel.ratio ) + 1
+        # println( "        not enough points" )
+        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        kernel.xCount += xLen
+        return T[]
+    end 
+    
+    pfb::PFB{T}        = kernel.pfb
     dlyLine::Vector{T} = self.dlyLine
-    dlyLineLen         = length( dlyLine )
-    φIdx               = self.kernel.φIdx
-    reqDlyLineLen      = self.reqDlyLineLen
-    combinedLen        = dlyLineLen + xLen
-
-    if combinedLen <= reqDlyLineLen
-        append!( dlyLine, x )
-        return buffer, 0
-    end
-
-    xStartIdx     = reqDlyLineLen - dlyLineLen + 1
-    xOffset       = xStartIdx - 1
-    xLen          = length( x ) - xOffset
-    outLen        = outputlength( self, x )
-    dlyLine       = [ dlyLine, x[1:xStartIdx-1] ]
-    tapsPerφ      = self.kernel.tapsPerφ
-    criticalYidx  = min( self.kernel.criticalYidx, outLen )
-    interpolation = num( ratio )
-    decimation    = den( ratio )
-    φIdxStepSize  = mod( decimation, interpolation )
-    Nφ            = self.kernel.Nφ
-    criticalφIdx  = Nφ - φIdxStepSize
+    xOffset            = inputindex( kernel.yCount, kernel.ratio ) - kernel.xCount
+    xLen               = xLen - xOffset
+    outLen             = outputlength( xLen, kernel.ratio, kernel.φIdx )
+    # println( "$outLen = outputlength( $xLen, $(kernel.ratio), $(kernel.φIdx) )" )
+    dlyLine            = [ dlyLine[1+xOffset:end], x[1:xOffset] ]
+    criticalYidx       = min( kernel.criticalYidx, outLen )
+    interpolation      = num( kernel.ratio )
+    decimation         = den( kernel.ratio )
+    φIdxStepSize       = mod( decimation, interpolation )
+    criticalφIdx       = kernel.Nφ - φIdxStepSize
+    
+    buffer = similar( x, outLen )
 
     yIdx         = 0
     inputIdx     = 1
-    φIdxLast     = 0
-    inputIdxLast = 0
 
     for yIdx in 1:criticalYidx
         accumulator = zero(T)
+        
+        # println()
+        # print( "    y[$(yIdx+kernel.yCount)] =")
+        
+        # for k in 1:kernel.tapsPerφ-inputIdx
+        #     @inbounds accumulator += pfb[ k, kernel.φIdx ] * dlyLine[ k+inputIdx-1]
+        #     print( " ($(pfb[ k, kernel.φIdx ]) * $(dlyLine[ k+inputIdx-1]))")
+        # end
+        #
+        # for k in 1:inputIdx
+        #     @inbounds accumulator += pfb[ end-inputIdx+k, kernel.φIdx ] * x[ k+xOffset ]
+        #     print( " <$(pfb[ end-inputIdx+k, kernel.φIdx ]) * $(x[ k+xOffset ])>")
+        # end
+        
+        thisInputIdx = inputindex( kernel.yCount + yIdx, kernel.ratio )-kernel.xCount
+        thisX       = [dlyLine, x[1:thisInputIdx]][end-kernel.tapsPerφ+1:end]
+        thisφ       = pfb[:,kernel.φIdx]
+        accumulator = dot( thisφ, thisX )
 
-        for k in 1:tapsPerφ-inputIdx
-            @inbounds accumulator += pfb[ k, φIdx ] * dlyLine[ k+inputIdx-1]
-        end
+        inputIdx    += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )
+        kernel.φIdx         = kernel.φIdx > criticalφIdx ? kernel.φIdx + φIdxStepSize - kernel.Nφ : kernel.φIdx + φIdxStepSize #
 
-        for k in 1:inputIdx
-            @inbounds accumulator += pfb[ end-inputIdx+k, φIdx ] * x[ k+xOffset ]
-        end
-
-        inputIdxLast = inputIdx                                                             # TODO: get rid of need to store last
-        φIdxLast     = φIdx                                                                 # TODO: get rid of need to store last
-        inputIdx    += ifloor( ( φIdx + decimation - 1 ) / interpolation )
-        φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize # 
-
-        @inbounds buffer[ yIdx ] = accumulator
+        buffer[ yIdx ] = accumulator
     end
 
     for yIdx in criticalYidx+1:outLen
         accumulator = zero(T)
-        xFirstIdx::Int   = inputIdx-tapsPerφ+xOffset                                        # this is actually ones less than the input of our first, with k added below it is the actuall index
+        xFirstIdx::Int   = inputIdx-kernel.tapsPerφ+xOffset                                        # this is actually ones less than the input of our first, with k added below it is the actuall index
 
-        for k in 1:tapsPerφ
-            @inbounds accumulator += pfb[k, φIdx] * x[ k + xFirstIdx ]
-        end
+        # println()
+        # print( "    y[$(yIdx+kernel.yCount)] =")
 
-        inputIdxLast = inputIdx                                                             # TODO: get rid of need to store last
-        φIdxLast     = φIdx                                                                 # TODO: get rid of need to store last
-        inputIdx    += ifloor( ( φIdx + decimation - 1 ) / interpolation )
-        φIdx         = φIdx > criticalφIdx ? φIdx + φIdxStepSize - Nφ : φIdx + φIdxStepSize
+        # for k in 1:kernel.tapsPerφ
+        #     @inbounds accumulator += pfb[k, kernel.φIdx] * x[ k + xFirstIdx ]
+        # end
+        
+        thisInputIdx = inputindex( kernel.yCount + yIdx, kernel.ratio )-kernel.xCount
+        thisφ       = pfb[:,kernel.φIdx]
+        thisX       = x[thisInputIdx-kernel.tapsPerφ+1:thisInputIdx]        
+        
+        accumulator = dot( thisφ, thisX )
+        
+        inputIdx    += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )
+        kernel.φIdx         = kernel.φIdx > criticalφIdx ? kernel.φIdx + φIdxStepSize - kernel.Nφ : kernel.φIdx + φIdxStepSize
 
-        @inbounds buffer[ yIdx ] = accumulator
+        buffer[ yIdx ] = accumulator
     end
-
-    xLeftoverLen     = length( x ) - xOffset - inputIdxLast
-    sampleDeficit    = inputIdx - inputIdxLast - xLeftoverLen
-    dlyLineLen       = reqDlyLineLen - sampleDeficit + 1
-    self.kernel.φIdx = φIdx
-
-    if length( x ) >= reqDlyLineLen
-        self.dlyLine = x[end-dlyLineLen+1:end]
-    else
-        self.dlyLine = [ dlyLine, x[xStartIdx:end] ][end-dlyLineLen+1:end]
-    end
-
-    return outLen
-end
-
-function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
-    if ( outLen = outputlength( self, x ) ) == 0
-        append!( self.dlyLine, x )
-        return T[]
-    end
-
-    buffer = similar( x, outLen )
-    filt!( buffer, self, x )
+    
+    kernel.yCount += outLen
+    kernel.xCount += length( x )
+    self.dlyLine   = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
 
     return buffer
 end
