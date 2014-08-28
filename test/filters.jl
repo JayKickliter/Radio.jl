@@ -5,7 +5,6 @@ import Multirate
 
 
 
-
 #==============================================================================#
 #               ____ _ _  _ ____ _    ____    ____ ____ ___ ____               #
 #               [__  | |\ | | __ |    |___    |__/ |__|  |  |___               #
@@ -166,6 +165,12 @@ function test_rational( h, x, ratio )
     println(); println()
     println( "Testing rational resampling. xLen = $xLen, hLen = $hLen, ratio = $ratio")
 
+    # @printf( "\n\tIPPDSP.filt\n\t\t")
+    # # newXlen = xLen - mod( xLen, downfactor )
+    # self = IPPDSP.FIRFilter( eltype(x), h, upfactor, downfactor )
+    # @time ippResult = IPPDSP.filt( self, x )
+    # display(ippResult)
+
     @printf( "\n\tNaive rational resampling with Base.filt\n\t\t")
     @time begin
         xx          = zeros( resultType, length(x) * upfactor )
@@ -177,45 +182,98 @@ function test_rational( h, x, ratio )
 
         naiveResultInterpolated = Base.filt( h, one(eltype(h)), xx );
         naiveResult = [ naiveResultInterpolated[n] for n = 1:downfactor:length( naiveResultInterpolated ) ]
-    end
-
+    end    
+    # display( naiveResult )
+    
     @printf( "\n\tMultirate.filt rational resampling. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, ratio )
     @time begin
-        y1 = Multirate.filt( self, x1 )
-        y2 = Multirate.filt( self, x2 )
+        s1 = Multirate.filt( self, x1 )
+        s2 = Multirate.filt( self, x2 )
     end
-    statefulResult = [ y1, y2 ]
+    statefulResult = [ s1, s2 ]
+    # display(statefulResult)
 
-    @printf( "\n\tMultirate.filt rational. Piecewise for first %d inputs, then x2\n\t\t", length( x1 ) )
+    @printf( "\n\tMultirate.filt rational. Piecewise for all %d inputs\n\t\t", length( x ) )
     self = Multirate.FIRFilter( h, ratio )
+    # println( "pfb = $(self.kernel.pfb)")
     y1 = similar( x, 0 )
     @time begin
-        for i in 1:length(x1)
-            append!( y1, Multirate.filt( self, x1[i:i] ) )
+        for i in 1:length(x)
+            append!( y1, Multirate.filt( self, x[i:i] ) )
         end
-        y2 = Multirate.filt( self, x2 )
     end
-    piecewiseResult = [ y1, y2 ]
+    piecewiseResult = y1
+    # display( piecewiseResult )
 
-    areApprox( naiveResult, statefulResult ) && areApprox( naiveResult, piecewiseResult )
+
+    
+    if areApprox( naiveResult, statefulResult ) && areApprox( naiveResult, piecewiseResult )
+        return true
+    end
+
+    
+    st1 = [ s1, zeros(eltype(s1), length(s2)) ]
+    st2 = [ zeros(eltype(s2), length(s1)) , s2 ]
+    
+    commonLen = min( length(naiveResult), length(statefulResult),length(piecewiseResult) )
+    display( [ [1:commonLen] naiveResult[1:commonLen] statefulResult[1:commonLen]  piecewiseResult[1:commonLen] ])
+
+    return false
 end
 
-h  = rand( rand(27:128,1)[1] );
-x  = rand( int(1e6)+rand( 1:100, 1 )[1] );
 
-interpolation = rand(1:32, 1)[1]
-decimation    = rand(1:32, 1)[1]
-ratio         = interpolation//decimation
 
-Multirate.filt( Multirate.FIRFilter( h ), x[1:min(100, length(x))]);
-@test test_singlerate( h, x );
 
-Multirate.filt( Multirate.FIRFilter( h, 1//decimation ), x[1:min(100, length(x))]);
-@test test_decimate( h, x, decimation );
 
-Multirate.filt( Multirate.FIRFilter( h, interpolation//1 ), x[1:min(100, length(x))]);
-@test test_interpolate( h, x, interpolation )
+# Multirate.filt( Multirate.FIRFilter( h ), x[1:min(100, length(x))]);
+# @test test_singlerate( h, x );
+#
+# Multirate.filt( Multirate.FIRFilter( h, 1//decimation ), x[1:min(100, length(x))]);
+# @test test_decimate( h, x, decimation );
+#
+# Multirate.filt( Multirate.FIRFilter( h, interpolation//1 ), x[1:min(100, length(x))]);
+# @test test_interpolate( h, x, interpolation )
 
-Multirate.filt( Multirate.FIRFilter( h, ratio ), x[1:min(100, length(x))]);
-@test test_rational( h, x, ratio )
+
+function run_tests()
+    for i in 1:100
+        for j in 1:10; println(); end
+        println( "Test number $i")
+        interpolation = rand(2:32, 1)[1]
+        decimation    = rand(2:32, 1)[1]
+        # interpolation   = 7
+        # decimation      = 11
+        # h             = rand(Float32, rand(1:128,1)[1] )
+        # x             = rand(Float32, int(1e3)+rand( 1:100, 1 )[1] )
+        # x               = [ 1.0:40 ]
+        # h = [1.0:40]
+        ratio           = interpolation//decimation
+        while ( num( ratio ) == 1 || den( ratio ) == 1 )
+            ratio = rand(2:32, 1)[1]//rand(2:32, 1)[1]
+        end
+        
+        
+        # h           = [ 1.0, zeros(3) ]        
+        h           = [1.0:rand(num(ratio):64, 1)[1]]
+        # interpolation = num(ratio)
+        # decimation    = den(ratio)
+        # hLen          = 2*interpolation
+        # tapsPerφ      = 4
+        
+        # x    = [ 1.0:rand(103:192, 1)[1] ]
+        x      = [ 1.0 : 20*decimation/interpolation ]
+
+        # hLen = interpolation*2
+        # h      = zeros( 2, interpolation )
+        # h[1,:] = 1
+        # h      = vec(reshape(h', interpolation*2, 1))
+        
+        # Multirate.filt( Multirate.FIRFilter( h, ratio ), x[1:min(100, length(x))])
+        # xLen = length(x)
+        # x = x[1:xLen - mod( xLen, den( ratio ) )]
+        @test test_rational( h, x, ratio )
+    end    
+end
+
+run_tests()
