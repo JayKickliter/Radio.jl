@@ -21,10 +21,10 @@ function test_singlerate( h, x )
     println(); println()
     println( "Testing single-rate fitering. xLen = $xLen, hLen = $hLen")
 
-    @printf( "\n\tBase.filt\n\t\t")
+    @printf( "\nBase.filt\n\t\t")
     @time naiveResult = Base.filt( h, 1.0, x )
 
-    @printf( "\n\tMultirate.filt filt. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
+    @printf( "\nMultirate.filt filt. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, 1//1 )
     @time begin
         y1 = Multirate.filt( self, x1 )
@@ -32,7 +32,7 @@ function test_singlerate( h, x )
     end
     statefulResult = [ y1, y2 ]
 
-    @printf( "\n\tMultirate.filt filt. Piecewise for first %d inputs\n\t\t", length( x1 ) )
+    @printf( "\nMultirate.filt filt. Piecewise for first %d inputs\n\t\t", length( x1 ) )
     Multirate.reset( self )
     @time begin
         for i in 1:length(x1)
@@ -65,13 +65,13 @@ function test_decimate( h, x, decimation )
     println(); println()
     println( "Testing decimation. xLen = $xLen, hLen = $hLen, decimation = $decimation")
 
-    @printf( "\n\tNaive decimation with Base.filt\n\t\t")
+    @printf( "\nNaive decimation with Base.filt\n\t\t")
     @time begin
         naiveResult   = Base.filt( h, one(eltype(h)), x )
         naiveResult   = naiveResult[1:decimation:end]
     end
 
-    @printf( "\n\tMultirate.filt decimation. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
+    @printf( "\nMultirate.filt decimation. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, 1//decimation )
     @time begin
         y1 = Multirate.filt( self, x1 )
@@ -79,7 +79,7 @@ function test_decimate( h, x, decimation )
     end
     statefulResult = [ y1, y2 ]
 
-    @printf( "\n\tMultirate.filt decimation. Piecewise for first %d inputs.\n\t\t", length( x1 ) )
+    @printf( "\nMultirate.filt decimation. Piecewise for first %d inputs.\n\t\t", length( x1 ) )
     Multirate.reset( self )
     y1 = similar( x, 0 )
     @time begin
@@ -112,7 +112,7 @@ function test_interpolate( h, x, interpolation )
     println(); println()
     println( "Testing interpolation. xLen = $xLen, hLen = $hLen, interpolation = $interpolation")
 
-    @printf( "\n\tNaive interpolation with Base.filt\n\t\t")
+    @printf( "\nNaive interpolation with Base.filt\n\t\t")
     @time begin
         xZeroStuffed = zeros( eltype(x), xLen * interpolation )
         for n = 0:xLen-1;
@@ -121,7 +121,7 @@ function test_interpolate( h, x, interpolation )
         naiveResult = Base.filt( h, one(eltype(h)), xZeroStuffed )
     end
 
-    @printf( "\n\tMultirate.filt interpolation. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
+    @printf( "\nMultirate.filt interpolation. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, interpolation//1 )
     @time begin
         y1 = Multirate.filt( self, x1 )
@@ -129,7 +129,7 @@ function test_interpolate( h, x, interpolation )
     end
     statefulResult = [ y1, y2 ]
 
-    @printf( "\n\tMultirate.filt interpolation. Piecewise for first %d inputs\n\t\t", length( x1 ) )
+    @printf( "\nMultirate.filt interpolation. Piecewise for first %d inputs\n\t\t", length( x1 ) )
     Multirate.reset( self )
     y1 = similar( x, 0 )
     @time begin
@@ -165,13 +165,13 @@ function test_rational( h, x, ratio )
     println(); println()
     println( "Testing rational resampling. xLen = $xLen, hLen = $hLen, ratio = $ratio")
 
-    # @printf( "\n\tIPPDSP.filt\n\t\t")
+    # @printf( "\nIPPDSP.filt\n\t\t")
     # # newXlen = xLen - mod( xLen, downfactor )
     # self = IPPDSP.FIRFilter( eltype(x), h, upfactor, downfactor )
     # @time ippResult = IPPDSP.filt( self, x )
     # display(ippResult)
 
-    @printf( "\n\tNaive rational resampling with Base.filt\n\t\t")
+    @printf( "\nNaive rational resampling with Base.filt\n\t\t")
     @time begin
         xx          = zeros( resultType, length(x) * upfactor )
         naiveResult = Array( resultType, int( ceil( length(x) * ratio )))
@@ -185,7 +185,12 @@ function test_rational( h, x, ratio )
     end    
     # display( naiveResult )
     
-    @printf( "\n\tMultirate.filt rational resampling. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
+    println( "___ _ _ _ ____    ___  ____ ____ ___ " )
+    println( " |  | | | |  |    |__] |__| |__/  |  " )
+    println( " |  |_|_| |__|    |    |  | |  \\  |  " )
+                                         
+    
+    @printf( "\nMultirate.filt rational resampling. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, ratio )
     @time begin
         s1 = Multirate.filt( self, x1 )
@@ -193,8 +198,14 @@ function test_rational( h, x, ratio )
     end
     statefulResult = [ s1, s2 ]
     # display(statefulResult)
-
-    @printf( "\n\tMultirate.filt rational. Piecewise for all %d inputs\n\t\t", length( x ) )
+    
+    println()
+    println()
+    println( "___  _ ____ ____ ____ _ _ _ ____ _ ____ ____ " )
+    println( "|__] | |___ |    |___ | | | |___ | [__  |___ " )
+    println( "|    | |___ |___ |___ |_|_| |___ | ___] |___ " )
+                                                 
+    @printf( "\nMultirate.filt rational. Piecewise for all %d inputs\n\t\t", length( x ) )
     self = Multirate.FIRFilter( h, ratio )
     # println( "pfb = $(self.kernel.pfb)")
     y1 = similar( x, 0 )
@@ -217,7 +228,7 @@ function test_rational( h, x, ratio )
     st2 = [ zeros(eltype(s2), length(s1)) , s2 ]
     
     commonLen = min( length(naiveResult), length(statefulResult),length(piecewiseResult) )
-    display( [ [1:commonLen] naiveResult[1:commonLen] statefulResult[1:commonLen]  piecewiseResult[1:commonLen] ])
+    display( [ [1:commonLen] naiveResult[1:commonLen] statefulResult[1:commonLen] st1[1:commonLen] st2[1:commonLen] piecewiseResult[1:commonLen] ])
 
     return false
 end
@@ -277,3 +288,11 @@ function run_tests()
 end
 
 run_tests()
+
+
+function test_phasenext()
+    interpolation = rand(2:32, 1)[1]
+    decimation    = rand(2:32, 1)[1]
+    
+    
+end

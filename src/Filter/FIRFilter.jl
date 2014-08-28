@@ -169,6 +169,13 @@ function inputindex( outputindex::Integer, ratio::Rational )
     ifloor( (outputindex*den(ratio)) / num(ratio) )
 end
 
+function nextphase( φCurrent::Integer, ratio::Rational )
+    interpolation = num( ratio )
+    decimation    = den( ratio )
+    φStep         = mod( decimation, interpolation )
+    φNext         = φCurrent + φStep
+    φNext         = φNext > interpolation ? φNext - interpolation : φNext
+end
 
 #==============================================================================#
 #               ____ _ _  _ ____ _    ____    ____ ____ ___ ____               #
@@ -332,7 +339,9 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
     buffer   = T[]
     yIdx     = 1 
     inputIdx = 1+kernel.inputDeficit    
-        println( "    ### IN MAIN LOOP")
+    
+    println( "    ### IN MAIN LOOP")
+    
     while inputIdx <= xLen
         println( "    inputIdx = $inputIdx, yIdx = $yIdx, φIdx = $(kernel.φIdx)")
         thisφ = pfb[ : , kernel.φIdx ]
@@ -343,7 +352,7 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
         append!( buffer, [accumulator] )
 
         yIdx       += 1
-        kernel.φIdx = kernel.φIdx > criticalφIdx ? kernel.φIdx + φIdxStepSize - kernel.Nφ : kernel.φIdx + φIdxStepSize #
+        kernel.φIdx = nextphase( kernel.φIdx, kernel.ratio )
         inputIdx    += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )
     end
     println( "    ### AFTER MAIN LOOP")    
