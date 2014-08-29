@@ -1,4 +1,4 @@
-reload("/Users/jkickliter/.julia/v0.3/Radio/src/Filter/FIRFilter.jl")
+reload(expanduser("~/.julia/v0.3/Radio/src/Filter/FIRFilter.jl"))
 
 using Base.Test
 import Multirate
@@ -185,6 +185,24 @@ function test_rational( h, x, ratio )
     end    
     # display( naiveResult )
     
+    println( "_ _  _ ___  _  _ ___    ___  ____ ____ ____ ____ ____ ____ ____ _ ____ _  _ " )
+    println( "| |\\ | |__] |  |  |     |__] |__/ |  | | __ |__/ |___ [__  [__  | |  | |\\ | " )
+    println( "| | \\| |    |__|  |     |    |  \\ |__| |__] |  \\ |___ ___] ___] | |__| | \\| " )
+    
+    z = [1:xLen]'
+    z = repmat( z, upfactor, 1 )
+    z = reshape( z, xLen*upfactor, 1)
+    z = [ z[n] for n in 1:downfactor:length(z) ]
+    display( [1:length(z) z ] )
+    
+    println( "____ _ _  _ ____ _    ____    ___  ____ ____ ____ " )
+    println( "[__  | |\\ | | __ |    |___    |__] |__| [__  [__  " )
+    println( "___] | | \\| |__] |___ |___    |    |  | ___] ___] " )
+    
+    self = Multirate.FIRFilter( h, ratio )
+    @time singlepassResult = Multirate.filt( self, x )
+    
+    
     println( "___ _ _ _ ____    ___  ____ ____ ___ " )
     println( " |  | | | |  |    |__] |__| |__/  |  " )
     println( " |  |_|_| |__|    |    |  | |  \\  |  " )
@@ -219,7 +237,7 @@ function test_rational( h, x, ratio )
 
 
     
-    if areApprox( naiveResult, statefulResult ) && areApprox( naiveResult, piecewiseResult )
+    if areApprox( naiveResult, singlepassResult ) && areApprox( naiveResult, statefulResult ) && areApprox( naiveResult, piecewiseResult )
         return true
     end
 
@@ -227,8 +245,8 @@ function test_rational( h, x, ratio )
     st1 = [ s1, zeros(eltype(s1), length(s2)) ]
     st2 = [ zeros(eltype(s2), length(s1)) , s2 ]
     
-    commonLen = min( length(naiveResult), length(statefulResult),length(piecewiseResult) )
-    display( [ [1:commonLen] naiveResult[1:commonLen] statefulResult[1:commonLen] st1[1:commonLen] st2[1:commonLen] piecewiseResult[1:commonLen] ])
+    commonLen = min( length(naiveResult), length( singlepassResult ), length(statefulResult), length(piecewiseResult) )
+    display( [ [1:commonLen] naiveResult[1:commonLen] singlepassResult[1:commonLen] statefulResult[1:commonLen] #=st1[1:commonLen] st2[1:commonLen]=# piecewiseResult[1:commonLen] ])
 
     return false
 end
@@ -287,12 +305,70 @@ function run_tests()
     end    
 end
 
-run_tests()
+function debug_test()
+    for i in 1:100
+        # for j in 1:10; println(); end
+        # println( "Test number $i")
+        # interpolation = rand(2:32, 1)[1]
+        # decimation    = rand(2:32, 1)[1]
+        interpolation   = 3
+        decimation      = 4
+        # h             = rand(Float32, rand(1:128,1)[1] )
+        # x             = rand(Float32, int(1e3)+rand( 1:100, 1 )[1] )
+        # x               = [ 1.0:40 ]
+        # h = [1.0:40]
+        ratio           = interpolation//decimation
+        # while ( num( ratio ) == 1 || den( ratio ) == 1 )
+            # ratio = rand(2:32, 1)[1]//rand(2:32, 1)[1]
+        # end
+        
+        
+        h           = [ 1.0, 4*interpolation-1 ]        
+        # h           = [1.0:rand(num(ratio):64, 1)[1]]
+        # interpolation = num(ratio)
+        # decimation    = den(ratio)
+        # hLen          = 2*interpolation
+        # tapsPerφ      = 4
+        
+        # x    = [ 1.0:rand(103:192, 1)[1] ]
+        x      = [ 1.0 : 20*decimation/interpolation ]
 
+        # hLen = interpolation*2
+        # h      = zeros( 2, interpolation )
+        # h[1,:] = 1
+        # h      = vec(reshape(h', interpolation*2, 1))
+        
+        # Multirate.filt( Multirate.FIRFilter( h, ratio ), x[1:min(100, length(x))])
+        # xLen = length(x)
+        # x = x[1:xLen - mod( xLen, den( ratio ) )]
+        @test test_rational( h, x, ratio )
+    end    
+end
 
 function test_phasenext()
-    interpolation = rand(2:32, 1)[1]
-    decimation    = rand(2:32, 1)[1]
     
-    
+    for interpolation in 1:8
+        for decimation in 1:8
+            # println()
+            # println()
+            # println()
+            # println( "ratio = $(interpolation//decimation)")
+            ratio           = interpolation//decimation
+            interpolation   = num(ratio)
+            decimation      = den(ratio)
+            x               = repmat( [1:interpolation], decimation )
+            reference = [ x[n] for n = 1:decimation:length( x ) ]
+            result = [ 1 ]
+            for i in 2:interpolation
+                append!( result, [ Multirate.nextphase( result[end], ratio ) ] )
+            end
+            @test areApprox( reference, result )
+            # display( [ reference result ] )
+        end
+    end
 end
+
+
+# debug_test()
+run_tests()
+# test_phasenext()
