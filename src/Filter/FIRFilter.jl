@@ -13,7 +13,7 @@ export  FIRFilter,      polyize,
 #                                    Types                                     #
 #==============================================================================#
 
-typealias PFB{T} Array{T,2}
+typealias PFB{T} Matrix{T}
 
 abstract Filter
 abstract FIRKernel
@@ -328,29 +328,28 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
     criticalφIdx       = kernel.Nφ - φIdxStepSize
     outLen             = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
     buffer             = similar( x, outLen )
-    yIdx               = 1 
     inputIdx           = kernel.inputDeficit
+    yIdx               = 1
 
     while inputIdx <= xLen
-        
+
         accumulator = zero( T )
-                
+
         if inputIdx < kernel.tapsPerφ
             hIdx = 1
             for k in inputIdx:self.reqDlyLineLen
-                @inbounds accumulator += pfb[  hIdx, kernel.φIdx ] * dlyLine[ k ]
+                @inbounds accumulator += pfb[ hIdx, kernel.φIdx ] * dlyLine[ k ]
                 hIdx += 1
             end
 
-            for k in 1:inputIdx                     
-                @inbounds accumulator += pfb[ hIdx, kernel.φIdx ]* x[ k ]
+            for k in 1:inputIdx
+                @inbounds accumulator += pfb[ hIdx, kernel.φIdx ] * x[ k ]
                 hIdx += 1
             end
-            
         else
             hIdx = 1
             for k in inputIdx-kernel.tapsPerφ+1:inputIdx
-                @inbounds accumulator += pfb[ hIdx, kernel.φIdx  ]  * x[ k ]
+                @inbounds accumulator += pfb[ hIdx, kernel.φIdx ] * x[ k ]
                 hIdx += 1
             end
         end
@@ -358,10 +357,10 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
         buffer[ yIdx ] = accumulator
 
         yIdx       += 1
-        inputIdx   += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )        
+        inputIdx   += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )
         kernel.φIdx = nextphase( kernel.φIdx, kernel.ratio )
     end
-    
+
     kernel.inputDeficit = inputIdx - xLen
     self.dlyLine        = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
 
