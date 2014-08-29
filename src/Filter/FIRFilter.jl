@@ -314,49 +314,26 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
     kernel       = self.kernel
     xLen         = length( x )
 
-    # println()
-    # println()
-    # println( "filt" )
-    # println( "    ### BEFORE DEFICIT CHECK")
-    # println( "          xLen        = $xLen")
-    # println( "          deficit     = $(kernel.inputDeficit)")
-    # println( "          dlyLine     = $(self.dlyLine)")
     if xLen < kernel.inputDeficit
         self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
         kernel.inputDeficit -= xLen
         return T[]
     end
 
-    pfb::PFB{T}           = kernel.pfb
-    dlyLine::Vector{T}    = self.dlyLine
-    
-    # if kernel.inputDeficit > 1 
-        # dlyLine = [ dlyLine, x[1:kernel.inputDeficit-1] ][end-self.reqDlyLineLen+1:end]
-        # x       = x[kernel.inputDeficit:end]    
-        # xLen    = length( x )  
-    # end
+    pfb::PFB{T}        = kernel.pfb
+    dlyLine::Vector{T} = self.dlyLine
+    interpolation      = num( kernel.ratio )
+    decimation         = den( kernel.ratio )
+    φIdxStepSize       = mod( decimation, interpolation )
+    criticalφIdx       = kernel.Nφ - φIdxStepSize
+    outLen             = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
+    buffer             = similar( x, outLen )
+    yIdx               = 1 
+    inputIdx           = kernel.inputDeficit
 
-    # println( "    ### AFTER DEFICIT CHECK")
-    interpolation = num( kernel.ratio )
-    decimation    = den( kernel.ratio )
-    φIdxStepSize  = mod( decimation, interpolation )
-    criticalφIdx  = kernel.Nφ - φIdxStepSize
-    outLen        = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
-    # dlyLine       = [ dlyLine, x[1:kernel.inputDeficit-1] ][end-self.reqDlyLineLen+1:end]
-
-    # println( "          outLen = $outLen = outputlength( $xLen, $(kernel.ratio), $(kernel.φIdx) )")
-
-    buffer   = similar( x, outLen )
-    yIdx     = 1 
-    inputIdx = kernel.inputDeficit
-    
-    # println( "    ### IN MAIN LOOP")
-    
     while inputIdx <= xLen
+        
         accumulator = zero( T )
-
-        # thisφ = pfb[ : , kernel.φIdx ]
-        # thisX = [dlyLine, x[1:inputIdx]][end-kernel.tapsPerφ+1:end]
                 
         if inputIdx < kernel.tapsPerφ
             hIdx = 1
@@ -377,27 +354,16 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
                 hIdx += 1
             end
         end
-        
-        
-        # println( "          inputIdx    = $inputIdx, yIdx = $yIdx, φIdx = $(kernel.φIdx)")
 
-        # println( "          thisX       = $(thisX')")
-        
-        
-        
-        # accumulator = dot( thisφ, thisX )
         buffer[ yIdx ] = accumulator
 
         yIdx       += 1
         inputIdx   += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )        
         kernel.φIdx = nextphase( kernel.φIdx, kernel.ratio )
     end
-    # println( "    ### AFTER MAIN LOOP")
-    # println( "          inputIdx    = $inputIdx")
-    # println( "          deficit     = $(inputIdx-xLen)")
     
-    kernel.inputDeficit        = inputIdx - xLen
-    self.dlyLine               = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+    kernel.inputDeficit = inputIdx - xLen
+    self.dlyLine        = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
 
     return buffer
 end

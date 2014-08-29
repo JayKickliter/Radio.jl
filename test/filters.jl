@@ -198,7 +198,8 @@ function test_rational( h, x, ratio )
    # println( "____ _ _  _ ____ _    ____    ___  ____ ____ ____ " )
    # println( "[__  | |\\ | | __ |    |___    |__] |__| [__  [__  " )
    # println( "___] | | \\| |__] |___ |___    |    |  | ___] ___] " )
-    
+
+    @printf( "\nMultirate.filt rational resampling. Single pass over all %d elements.\n\t\t", xLen )
     self = Multirate.FIRFilter( h, ratio )
     @time singlepassResult = Multirate.filt( self, x )
     
@@ -290,7 +291,7 @@ function run_tests()
         # hLen          = 2*interpolation
         # tapsPerφ      = 4
         
-        x    = [ 1.0:rand(103:192, 1)[1] ]
+        # x    = [ 1.0:rand(103:192, 1)[1] ]
         # x      = [ 1.0 : 20*decimation/interpolation ]
 
         # hLen = interpolation*2
