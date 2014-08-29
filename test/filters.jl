@@ -162,8 +162,8 @@ function test_rational( h, x, ratio )
     downfactor = den( ratio )
     resultType = promote_type( eltype(h), eltype(x) )
 
-    println(); println()
-    println( "Testing rational resampling. xLen = $xLen, hLen = $hLen, ratio = $ratio")
+   # println(); println()
+   # println( "Testing rational resampling. xLen = $xLen, hLen = $hLen, ratio = $ratio")
 
     # @printf( "\nIPPDSP.filt\n\t\t")
     # # newXlen = xLen - mod( xLen, downfactor )
@@ -185,27 +185,27 @@ function test_rational( h, x, ratio )
     end    
     # display( naiveResult )
     
-    println( "_ _  _ ___  _  _ ___    ___  ____ ____ ____ ____ ____ ____ ____ _ ____ _  _ " )
-    println( "| |\\ | |__] |  |  |     |__] |__/ |  | | __ |__/ |___ [__  [__  | |  | |\\ | " )
-    println( "| | \\| |    |__|  |     |    |  \\ |__| |__] |  \\ |___ ___] ___] | |__| | \\| " )
+   # println( "_ _  _ ___  _  _ ___    ___  ____ ____ ____ ____ ____ ____ ____ _ ____ _  _ " )
+   # println( "| |\\ | |__] |  |  |     |__] |__/ |  | | __ |__/ |___ [__  [__  | |  | |\\ | " )
+   # println( "| | \\| |    |__|  |     |    |  \\ |__| |__] |  \\ |___ ___] ___] | |__| | \\| " )
     
     z = [1:xLen]'
     z = repmat( z, upfactor, 1 )
     z = reshape( z, xLen*upfactor, 1)
     z = [ z[n] for n in 1:downfactor:length(z) ]
-    display( [1:length(z) z ] )
+   # display( [1:length(z) z ] )
     
-    println( "____ _ _  _ ____ _    ____    ___  ____ ____ ____ " )
-    println( "[__  | |\\ | | __ |    |___    |__] |__| [__  [__  " )
-    println( "___] | | \\| |__] |___ |___    |    |  | ___] ___] " )
+   # println( "____ _ _  _ ____ _    ____    ___  ____ ____ ____ " )
+   # println( "[__  | |\\ | | __ |    |___    |__] |__| [__  [__  " )
+   # println( "___] | | \\| |__] |___ |___    |    |  | ___] ___] " )
     
     self = Multirate.FIRFilter( h, ratio )
     @time singlepassResult = Multirate.filt( self, x )
     
     
-    println( "___ _ _ _ ____    ___  ____ ____ ___ " )
-    println( " |  | | | |  |    |__] |__| |__/  |  " )
-    println( " |  |_|_| |__|    |    |  | |  \\  |  " )
+   # println( "___ _ _ _ ____    ___  ____ ____ ___ " )
+   # println( " |  | | | |  |    |__] |__| |__/  |  " )
+   # println( " |  |_|_| |__|    |    |  | |  \\  |  " )
                                          
     
     @printf( "\nMultirate.filt rational resampling. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
@@ -217,11 +217,11 @@ function test_rational( h, x, ratio )
     statefulResult = [ s1, s2 ]
     # display(statefulResult)
     
-    println()
-    println()
-    println( "___  _ ____ ____ ____ _ _ _ ____ _ ____ ____ " )
-    println( "|__] | |___ |    |___ | | | |___ | [__  |___ " )
-    println( "|    | |___ |___ |___ |_|_| |___ | ___] |___ " )
+   # println()
+   # println()
+   # println( "___  _ ____ ____ ____ _ _ _ ____ _ ____ ____ " )
+   # println( "|__] | |___ |    |___ | | | |___ | [__  |___ " )
+   # println( "|    | |___ |___ |___ |_|_| |___ | ___] |___ " )
                                                  
     @printf( "\nMultirate.filt rational. Piecewise for all %d inputs\n\t\t", length( x ) )
     self = Multirate.FIRFilter( h, ratio )
@@ -246,7 +246,7 @@ function test_rational( h, x, ratio )
     st2 = [ zeros(eltype(s2), length(s1)) , s2 ]
     
     commonLen = min( length(naiveResult), length( singlepassResult ), length(statefulResult), length(piecewiseResult) )
-    display( [ [1:commonLen] naiveResult[1:commonLen] singlepassResult[1:commonLen] statefulResult[1:commonLen] #=st1[1:commonLen] st2[1:commonLen]=# piecewiseResult[1:commonLen] ])
+   # display( [ [1:commonLen] naiveResult[1:commonLen] singlepassResult[1:commonLen] statefulResult[1:commonLen] #=st1[1:commonLen] st2[1:commonLen]=# piecewiseResult[1:commonLen] ])
 
     return false
 end
@@ -273,8 +273,8 @@ function run_tests()
         decimation    = rand(2:32, 1)[1]
         # interpolation   = 7
         # decimation      = 11
-        # h             = rand(Float32, rand(1:128,1)[1] )
-        # x             = rand(Float32, int(1e3)+rand( 1:100, 1 )[1] )
+        h             = rand(Float32, rand(1:128,1)[1] )
+        x             = rand(Float32, int(1e3)+rand( 1:100, 1 )[1] )
         # x               = [ 1.0:40 ]
         # h = [1.0:40]
         ratio           = interpolation//decimation
@@ -284,14 +284,14 @@ function run_tests()
         
         
         # h           = [ 1.0, zeros(3) ]        
-        h           = [1.0:rand(num(ratio):64, 1)[1]]
+        # h           = [1.0:rand(num(ratio):64, 1)[1]]
         # interpolation = num(ratio)
         # decimation    = den(ratio)
         # hLen          = 2*interpolation
         # tapsPerφ      = 4
         
-        # x    = [ 1.0:rand(103:192, 1)[1] ]
-        x      = [ 1.0 : 20*decimation/interpolation ]
+        x    = [ 1.0:rand(103:192, 1)[1] ]
+        # x      = [ 1.0 : 20*decimation/interpolation ]
 
         # hLen = interpolation*2
         # h      = zeros( 2, interpolation )
