@@ -306,7 +306,7 @@ function run_tests()
 end
 
 function debug_test()
-    for i in 1:100
+    for i in 1:1
         # for j in 1:10; println(); end
         # println( "Test number $i")
         # interpolation = rand(2:32, 1)[1]

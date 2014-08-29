@@ -78,9 +78,9 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
     else                                                      # rational
         pfb              = flipud(polyize( h, interpolation ))
         ( tapsPerφ, Nφ ) = size( pfb )
-        reqDlyLineLen    = max( tapsPerφ - 1, decimation )
+        reqDlyLineLen    = tapsPerφ - 1
         criticalYidx     = ifloor( tapsPerφ * resampleRatio )
-        kernel           = FIRRational( pfb, resampleRatio, Nφ, tapsPerφ, criticalYidx, 1, 0 )
+        kernel           = FIRRational( pfb, resampleRatio, Nφ, tapsPerφ, criticalYidx, 1, 1 )
     end
 
     dlyLine = zeros( eltype( h ), reqDlyLineLen )
@@ -330,42 +330,69 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
     pfb::PFB{T}           = kernel.pfb
     dlyLine::Vector{T}    = self.dlyLine
     
-    if kernel.inputDeficit > 1 
-        dlyLine = [ dlyLine, x[1:kernel.inputDeficit-1] ][end-self.reqDlyLineLen+1:end]
-        x       = x[1+kernel.inputDeficit-1:end]    
-        xLen    = length( x )  
-    end
-    
-    # println( "    ### AFTER DEFICIT CHECK")    
-    interpolation         = num( kernel.ratio )
-    decimation            = den( kernel.ratio )
-    φIdxStepSize          = mod( decimation, interpolation )
-    criticalφIdx          = kernel.Nφ - φIdxStepSize
-    outLen                = outputlength( xLen, kernel.ratio, kernel.φIdx )
-    # println( "          outLen      = $outLen = outputlength( $xLen, $(kernel.ratio), $(kernel.φIdx) )")
-    
+    # if kernel.inputDeficit > 1 
+        # dlyLine = [ dlyLine, x[1:kernel.inputDeficit-1] ][end-self.reqDlyLineLen+1:end]
+        # x       = x[kernel.inputDeficit:end]    
+        # xLen    = length( x )  
+    # end
 
-    buffer   = T[]
+    # println( "    ### AFTER DEFICIT CHECK")
+    interpolation = num( kernel.ratio )
+    decimation    = den( kernel.ratio )
+    φIdxStepSize  = mod( decimation, interpolation )
+    criticalφIdx  = kernel.Nφ - φIdxStepSize
+    outLen        = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
+    # dlyLine       = [ dlyLine, x[1:kernel.inputDeficit-1] ][end-self.reqDlyLineLen+1:end]
+
+    # println( "          outLen = $outLen = outputlength( $xLen, $(kernel.ratio), $(kernel.φIdx) )")
+
+    buffer   = similar( x, outLen )
     yIdx     = 1 
-    inputIdx = 1
+    inputIdx = kernel.inputDeficit
     
     # println( "    ### IN MAIN LOOP")
     
     while inputIdx <= xLen
+        accumulator = zero( T )
+
+        # thisφ = pfb[ : , kernel.φIdx ]
+        # thisX = [dlyLine, x[1:inputIdx]][end-kernel.tapsPerφ+1:end]
+                
+        if inputIdx < kernel.tapsPerφ
+            hIdx = 1
+            for k in inputIdx:self.reqDlyLineLen
+                @inbounds accumulator += pfb[  hIdx, kernel.φIdx ] * dlyLine[ k ]
+                hIdx += 1
+            end
+
+            for k in 1:inputIdx                     
+                @inbounds accumulator += pfb[ hIdx, kernel.φIdx ]* x[ k ]
+                hIdx += 1
+            end
+            
+        else
+            hIdx = 1
+            for k in inputIdx-kernel.tapsPerφ+1:inputIdx
+                @inbounds accumulator += pfb[ hIdx, kernel.φIdx  ]  * x[ k ]
+                hIdx += 1
+            end
+        end
+        
+        
         # println( "          inputIdx    = $inputIdx, yIdx = $yIdx, φIdx = $(kernel.φIdx)")
-        thisφ = pfb[ : , kernel.φIdx ]
-        thisX = [dlyLine, x[1:inputIdx]][end-kernel.tapsPerφ+1:end]
+
         # println( "          thisX       = $(thisX')")
         
-        accumulator = dot( thisφ, thisX )
-        append!( buffer, [accumulator] )
+        
+        
+        # accumulator = dot( thisφ, thisX )
+        buffer[ yIdx ] = accumulator
 
         yIdx       += 1
-        # inputIdx   += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )
         inputIdx   += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )        
         kernel.φIdx = nextphase( kernel.φIdx, kernel.ratio )
     end
-    # println( "    ### AFTER MAIN LOOP")    
+    # println( "    ### AFTER MAIN LOOP")
     # println( "          inputIdx    = $inputIdx")
     # println( "          deficit     = $(inputIdx-xLen)")
     
