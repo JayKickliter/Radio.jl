@@ -20,7 +20,7 @@ function test_singlerate( h, x )
     x2         = x[ pivotPoint+1 : end ]
 
     println(); println()
-    
+
     println( "____ _ _  _ ____ _    ____    ____ ____ ___ ____" )
     println( "[__  | |\\ | | __ |    |___    |__/ |__|  |  |___" )
     println( "___] | | \\| |__] |___ |___    |  \\ |  |  |  |___" )
@@ -32,7 +32,7 @@ function test_singlerate( h, x )
 
     @printf( "\n\tDSP.firfilt\n\t\t")
     @time dspResult = DSP.firfilt( h, x )
-    
+
     @printf( "\n\tMultirate.filt. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, 1//1 )
     @time begin
@@ -83,7 +83,7 @@ function test_decimation( h, x, decimation )
         baseResult   = Base.filt( h, one(eltype(h)), x )
         baseResult   = baseResult[1:decimation:end]
     end
-    
+
     @printf( "\n\tNaive decimation with DSP.firfilt\n\t\t")
     hDSP = h
     eltype( hDSP ) == eltype( x ) || (hDSP = eltype( x )[ he for he in h ])
@@ -114,10 +114,10 @@ function test_decimation( h, x, decimation )
     if areApprox( baseResult, statefulResult ) && areApprox( baseResult, piecewiseResult )
         return true
     end
-    
+
     display( [ baseResult statefulResult piecewiseResult ] )
     return false
-    
+
 end
 
 
@@ -140,7 +140,7 @@ function test_interpolation( h, x, interpolation )
     println( "_ _  _ ___ ____ ____ ___  _    ____ ____ ___ _ ____ _  _ " )
     println( "| |\\ |  |  |___ |__/ |__] |    |  | |__|  |  | |  | |\\ | " )
     println( "| | \\|  |  |___ |  \\ |    |___ |__| |  |  |  | |__| | \\| " )
-    println()                                                             
+    println()
     println( "Testing interpolation. xLen = $xLen, hLen = $hLen, interpolation = $interpolation")
 
     @printf( "\n\tNaive interpolation with Base.filt\n\t\t")
@@ -151,7 +151,7 @@ function test_interpolation( h, x, interpolation )
         end
         baseResult = Base.filt( h, one(eltype(h)), xZeroStuffed )
     end
-    
+
     @printf( "\n\tNaive interpolation with DSP.firfilt\n\t\t")
     hDSP = h
     eltype( hDSP ) == eltype( x ) || (hDSP = eltype( x )[ he for he in h ])
@@ -212,7 +212,7 @@ function test_rational( h, x, ratio )
     println( "____ ____ ____ ____ _  _ ___  _    ____ ____ " )
     println( "|__/ |___ [__  |__| |\\/| |__] |    |___ |__/ " )
     println( "|  \\ |___ ___] |  | |  | |    |___ |___ |  \\ " )
-    println()                                         
+    println()
     println( "Testing rational resampling. xLen = $xLen, hLen = $hLen, ratio = $ratio")
 
     @printf( "\n\tNaive rational resampling with Base.filt\n\t\t")
@@ -222,11 +222,11 @@ function test_rational( h, x, ratio )
 
         for n = 0:length(x)-1;
             xStuffed[ n*upfactor+1 ] = x[ n+1 ]
-        end 
+        end
 
         baseResult = Base.filt( h, one(eltype(h)), xStuffed );
         baseResult = [ baseResult[n] for n = 1:downfactor:length( baseResult ) ]
-    end    
+    end
 
     @printf( "\n\tNaive rational resampling DSP.firfilt\n\t\t")
     hDSP = h
@@ -237,11 +237,11 @@ function test_rational( h, x, ratio )
 
         for n = 0:length(x)-1;
             xStuffed[ n*upfactor+1 ] = x[ n+1 ]
-        end 
+        end
 
         dspResult = DSP.firfilt( hDSP, xStuffed );
         dspResult = [ dspResult[n] for n = 1:downfactor:length( dspResult ) ]
-    end    
+    end
 
     @printf( "\n\tIPPDSP.filt\n\t\t")
     self = IPPDSP.FIRFilter( eltype(x), h, upfactor, downfactor )
@@ -250,7 +250,7 @@ function test_rational( h, x, ratio )
     @printf( "\n\tMultirate.filt rational resampling. Single pass over all %d elements.\n\t\t", xLen )
     self = Multirate.FIRFilter( h, ratio )
     @time singlepassResult = Multirate.filt( self, x )
-    
+
     @printf( "\n\tMultirate.filt rational resampling. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, ratio )
     @time begin
@@ -258,7 +258,7 @@ function test_rational( h, x, ratio )
         s2 = Multirate.filt( self, x2 )
     end
     statefulResult = [ s1, s2 ]
-                                                 
+
     @printf( "\n\tMultirate.filt rational. Piecewise for all %d inputs\n\t\t", length( x ) )
     self = Multirate.FIRFilter( h, ratio )
     # println( "pfb = $(self.kernel.pfb)")
@@ -269,7 +269,7 @@ function test_rational( h, x, ratio )
         end
     end
     piecewiseResult = y1
-    
+
     if areApprox( baseResult, singlepassResult ) && areApprox( baseResult, statefulResult ) && areApprox( baseResult, piecewiseResult )
         return true
     end
@@ -282,21 +282,21 @@ end
 
 
 
-function test_all()    
+function test_all()
     for interpolation in 1:32, decimation in 1:32
         h    = rand(Float32, rand(16:128,1)[1] )
         xLen = int(rand( 1000:2000, 1 )[1])
         xLen = xLen-mod( xLen, decimation )
         x    = rand( Float32, xLen )
-    
+
         @test test_singlerate( h, x )
         @test test_decimation( h, x, decimation )
         @test test_interpolation( h, x, interpolation )
-        
+
         ratio = interpolation//decimation
-        
+
         if num(ratio) != 1 && den(ratio) != 1
-            @test test_rational( h, x, ratio )           
+            @test test_rational( h, x, ratio )
         end
     end
 end
@@ -316,7 +316,7 @@ end
 
 
 
-function test_phasenext()    
+function test_phasenext()
     for interpolation in 1:8
         for decimation in 1:8
             ratio           = interpolation//decimation
