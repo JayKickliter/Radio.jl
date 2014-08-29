@@ -220,10 +220,10 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
         @inbounds buffer[yIdx] = accumulator
     end
 
-    if xLen >= reqDlyLineLen
-        self.dlyLine = x[end-reqDlyLineLen+1:end]
+    if xLen >= self.reqDlyLineLen
+        copy!( self.dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
     else
-        self.dlyLine = [ dlyLine, x ][end-reqDlyLineLen+1:end]
+        self.dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
     end
 
     return buffer
@@ -286,11 +286,12 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
         (φ, inputIdx) = φ == Nφ ? ( 1, inputIdx+1 ) : ( φ+1, inputIdx )
     end
 
-    if xLen >= reqDlyLineLen
-        self.dlyLine = x[end-reqDlyLineLen+1:end]
+    if xLen >= self.reqDlyLineLen
+        copy!( self.dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
     else
-        self.dlyLine = [ dlyLine, x ][end-reqDlyLineLen+1:end]
+        self.dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
     end
+
 
     return buffer
 end
@@ -311,9 +312,10 @@ end
 #           |  \ |  |  |  .   |  \ |___ ___] |  | |  | |    |___ |___          #
 #==============================================================================#
 
-function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
+function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T} )
     kernel = self.kernel
     xLen   = length( x )
+    bufLen = length( buffer )
 
     if xLen < kernel.inputDeficit
         self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
@@ -321,20 +323,23 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
         return T[]
     end
 
+    outLen = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
+    bufLen >= outLen || error( "buffer is too small" )
+
     pfb::PFB{T}        = kernel.pfb
     dlyLine::Vector{T} = self.dlyLine
     interpolation      = num( kernel.ratio )
     decimation         = den( kernel.ratio )
     φIdxStepSize       = mod( decimation, interpolation )
     criticalφIdx       = kernel.Nφ - φIdxStepSize
-    outLen             = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
-    buffer             = similar( x, outLen )
+
     inputIdx           = kernel.inputDeficit
-    yIdx               = 1
+    yIdx               = 0
 
     while inputIdx <= xLen
 
         accumulator = zero( T )
+        yIdx       += 1
 
         if inputIdx < kernel.tapsPerφ
             hIdx = 1
@@ -357,13 +362,35 @@ function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
 
         buffer[ yIdx ] = accumulator
 
-        yIdx       += 1
         inputIdx   += ifloor( ( kernel.φIdx + decimation - 1 ) / interpolation )
         kernel.φIdx = nextphase( kernel.φIdx, kernel.ratio )
     end
 
     kernel.inputDeficit = inputIdx - xLen
-    self.dlyLine        = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+
+    if xLen >= self.reqDlyLineLen
+        copy!( self.dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+    else
+        self.dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+    end
+
+
+    return yIdx
+end
+
+function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
+    kernel = self.kernel
+    xLen   = length( x )
+
+    if xLen < kernel.inputDeficit
+        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        kernel.inputDeficit -= xLen
+        return T[]
+    end
+
+    outLen = outputlength( xLen-kernel.inputDeficit+1, kernel.ratio, kernel.φIdx )
+    buffer = similar( x, outLen )
+    filt!( buffer, self, x )
 
     return buffer
 end
@@ -377,7 +404,7 @@ end
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
+function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T} )
     kernel = self.kernel
     xLen   = length( x )
 
@@ -387,16 +414,17 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
         return T[]
     end
 
+    outLen = outputlength( xLen-kernel.inputDeficit+1, 1//kernel.decimation, 1 )
+
     h::Vector{T}       = kernel.h
     dlyLine::Vector{T} = self.dlyLine
-    outLen             = outputlength( xLen-kernel.inputDeficit+1, 1//kernel.decimation, 1 )
-    buffer             = similar( x, outLen )
     inputIdx           = kernel.inputDeficit
-    yIdx               = 1
+    yIdx               = 0
 
     while inputIdx <= xLen
 
         accumulator = zero( T )
+        yIdx       += 1
 
         if inputIdx < kernel.hLen
             hIdx = 1
@@ -419,15 +447,39 @@ function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
 
         buffer[ yIdx ] = accumulator
 
-        yIdx       += 1
         inputIdx   += kernel.decimation
     end
 
     kernel.inputDeficit = inputIdx - xLen
-    self.dlyLine        = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+
+    if xLen >= self.reqDlyLineLen
+        copy!( self.dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+    else
+        self.dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+    end
+
+
+    return yIdx
+end
+
+function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
+    kernel = self.kernel
+    xLen   = length( x )
+
+    if xLen < kernel.inputDeficit
+        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        kernel.inputDeficit -= xLen
+        return T[]
+    end
+
+    outLen = outputlength( xLen-kernel.inputDeficit+1, 1//kernel.decimation, 1 )
+    buffer = similar( x, outLen )
+    filt!( buffer, self, x )
 
     return buffer
 end
+
+
 
 
 end # module
