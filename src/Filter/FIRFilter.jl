@@ -37,6 +37,7 @@ type FIRDecimator <: FIRKernel
     h::Vector
     hLen::Int
     decimation::Int
+    inputDeficit::Int
 end
 
 # Rational resampler FIR kernel
@@ -67,9 +68,9 @@ function FIRFilter( h::Vector, resampleRatio::Rational = 1//1 )
         h             = flipud( h )
         kernel        = FIRStandard( h, hLen )
     elseif interpolation == 1                                 # decimate
-        reqDlyLineLen = max( decimation-1, length(h)-1 )
+        reqDlyLineLen = length( h ) - 1
         h             = flipud( h )
-        kernel        = FIRDecimator( h, hLen, decimation )
+        kernel        = FIRDecimator( h, hLen, decimation, 1 )
     elseif decimation == 1                                    # interpolate
         pfb              = flipud(polyize( h, interpolation ))
         ( tapsPerφ, Nφ ) = size( pfb )
@@ -311,8 +312,8 @@ end
 #==============================================================================#
 
 function filt{T}( self::FIRFilter{FIRRational}, x::Vector{T} )
-    kernel       = self.kernel
-    xLen         = length( x )
+    kernel = self.kernel
+    xLen   = length( x )
 
     if xLen < kernel.inputDeficit
         self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
@@ -376,73 +377,56 @@ end
 #                      |__/ |___ |___ | |  | |  |  |  |___                     #
 #==============================================================================#
 
-function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T} )
-    h::Vector{T}       = self.kernel.h
-    dlyLine::Vector{T} = self.dlyLine
-    xLen               = length( x )
-    dlyLineLen         = length( dlyLine )
-    reqDlyLineLen      = self.reqDlyLineLen
+function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
+    kernel = self.kernel
+    xLen   = length( x )
 
-    if xLen + dlyLineLen  < reqDlyLineLen
-        append!( dlyLine, x )
+    if xLen < kernel.inputDeficit
+        self.dlyLine = [ self.dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        kernel.inputDeficit -= xLen
         return T[]
     end
 
-    decimation   = self.kernel.decimation
-    xStartIdx    = reqDlyLineLen - dlyLineLen + 1
-    xOffset      = xStartIdx - 1
-    xLen         = length( x ) - xOffset
-    hLen         = self.kernel.hLen
-    outLen       = iceil(  xLen / decimation  )
-    # buffer       = similar( x, outLen )
-    criticalYidx = min( iceil( hLen / decimation ), outLen ) #
-    dlyLine      = [ dlyLine, x[1:xStartIdx-1] ]
+    h::Vector{T}       = kernel.h
+    dlyLine::Vector{T} = self.dlyLine
+    outLen             = outputlength( xLen-kernel.inputDeficit+1, 1//kernel.decimation, 1 )
+    buffer             = similar( x, outLen )
+    inputIdx           = kernel.inputDeficit
+    yIdx               = 1
 
-    inputIdx = 1                                               # inputIdx is is the current input, not the actual index of of the current x in the delay line
-    for yIdx in 1:criticalYidx                                 # Filtering is broken up into two outer loops
-        hIdx        = 1                                        # This first loop takes care of filter ramp up.
-        accumulator = zero(T)
+    while inputIdx <= xLen
 
-        for dlyLineIdx in inputIdx:reqDlyLineLen               # Inner Loop 1: Handles convolution of taps and delay line
-            @inbounds accumulator += h[hIdx] * dlyLine[dlyLineIdx]
-            hIdx += 1
+        accumulator = zero( T )
+
+        if inputIdx < kernel.hLen
+            hIdx = 1
+            for k in inputIdx:self.reqDlyLineLen
+                @inbounds accumulator += h[ hIdx ] * dlyLine[ k ]
+                hIdx += 1
+            end
+
+            for k in 1:inputIdx
+                @inbounds accumulator += h[ hIdx ] * x[ k ]
+                hIdx += 1
+            end
+        else
+            hIdx = 1
+            for k in inputIdx-kernel.hLen+1:inputIdx
+                @inbounds accumulator += h[ hIdx ] * x[ k ]
+                hIdx += 1
+            end
         end
 
-        for k in 1:inputIdx                                    # Inner Loop 2: handles convolution of taps and x
-            @inbounds accumulator += h[ hIdx ] * x[ k + xOffset ]
-            hIdx += 1
-        end
+        buffer[ yIdx ] = accumulator
 
-        @inbounds buffer[yIdx] = accumulator
-        inputIdx += decimation
+        yIdx       += 1
+        inputIdx   += kernel.decimation
     end
 
-    inputIdx -= hLen
-
-    for yIdx in criticalYidx+1:outLen                          # second outer loop, we are now in the clear to to convolve without going out of bounds
-        accumulator  = zero(T)
-
-        for k in 1:hLen
-            @inbounds accumulator += h[ k ] * x[ inputIdx + k + xOffset ]
-        end
-
-        @inbounds buffer[yIdx] = accumulator
-        inputIdx += decimation
-    end
-    inputIdx += hLen - decimation
-
-    xLeftoverLen = max( xLen - inputIdx, 0 )
-    dlyLineLen   = reqDlyLineLen - decimation + xLeftoverLen + 1
-    self.dlyLine = [ dlyLine, x[xStartIdx:end]][end-dlyLineLen+1:end]
+    kernel.inputDeficit = inputIdx - xLen
+    self.dlyLine        = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
 
     return buffer
-end
-
-function filt{T}( self::FIRFilter{FIRDecimator}, x::Vector{T} )
-    xLen       = length( x ) - self.reqDlyLineLen + length( self.dlyLine )
-    outLen     = iceil(  xLen / self.kernel.decimation  )
-    buffer     = similar( x, outLen )
-    filt!( buffer, self, x )
 end
 
 
