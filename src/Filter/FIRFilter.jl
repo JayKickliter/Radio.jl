@@ -221,10 +221,11 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRStandard}, x::Vector{T}
     end
 
     if xLen >= self.reqDlyLineLen
-        copy!( self.dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
     else
-        self.dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
     end
+    self.dlyLine = dlyLine
 
     return buffer
 end
@@ -287,10 +288,11 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRInterpolator}, x::Vecto
     end
 
     if xLen >= self.reqDlyLineLen
-        copy!( self.dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
     else
-        self.dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
     end
+    self.dlyLine = dlyLine
 
 
     return buffer
@@ -369,11 +371,11 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRRational}, x::Vector{T}
     kernel.inputDeficit = inputIdx - xLen
 
     if xLen >= self.reqDlyLineLen
-        copy!( self.dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
     else
-        self.dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
     end
-
+    self.dlyLine = dlyLine
 
     return yIdx
 end
@@ -453,10 +455,11 @@ function filt!{T}( buffer::Vector{T}, self::FIRFilter{FIRDecimator}, x::Vector{T
     kernel.inputDeficit = inputIdx - xLen
 
     if xLen >= self.reqDlyLineLen
-        copy!( self.dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
+        copy!( dlyLine, 1, x, xLen - self.reqDlyLineLen + 1, self.reqDlyLineLen )
     else
-        self.dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
+        dlyLine = [ dlyLine, x ][ end - self.reqDlyLineLen + 1: end ]
     end
+    self.dlyLine = dlyLine
 
 
     return yIdx

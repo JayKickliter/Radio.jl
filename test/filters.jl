@@ -25,13 +25,15 @@ function test_singlerate( h, x )
     println( "[__  | |\\ | | __ |    |___    |__/ |__|  |  |___" )
     println( "___] | | \\| |__] |___ |___    |  \\ |  |  |  |___" )
     println()
-    println( "Testing single-rate fitering. xLen = $xLen, hLen = $hLen")
+    println( "Testing single-rate fitering, $(eltype(h)) & $(eltype(x)). xLen = $xLen, hLen = $hLen")
 
     @printf( "\n\tBase.filt\n\t\t")
     @time baseResult = Base.filt( h, 1.0, x )
 
-    @printf( "\n\tDSP.firfilt\n\t\t")
-    @time dspResult = DSP.firfilt( h, x )
+    if method_exists( DSP.firfilt, ( typeof(h), typeof(x) ))
+        @printf( "\n\tDSP.firfilt\n\t\t")
+        @time dspResult = DSP.firfilt( h, x )
+    end
 
     @printf( "\n\tMultirate.filt. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
     self = Multirate.FIRFilter( h, 1//1 )
@@ -76,7 +78,7 @@ function test_decimation( h, x, decimation )
     println( "|  \\ |___ |    | |\\/| |__|  |  | |  | |\\ | " )
     println( "|__/ |___ |___ | |  | |  |  |  | |__| | \\| " )
     println()
-    println( "Testing decimation. xLen = $xLen, hLen = $hLen, decimation = $decimation")
+    println( "Testing decimation, $(eltype(h)) & $(eltype(x)). xLen = $xLen, hLen = $hLen, decimation = $decimation")
 
     @printf( "\n\tNaive decimation with Base.filt\n\t\t")
     @time begin
@@ -84,12 +86,12 @@ function test_decimation( h, x, decimation )
         baseResult   = baseResult[1:decimation:end]
     end
 
-    @printf( "\n\tNaive decimation with DSP.firfilt\n\t\t")
-    hDSP = h
-    eltype( hDSP ) == eltype( x ) || (hDSP = eltype( x )[ he for he in h ])
-    @time begin
-        dspResult = DSP.firfilt( hDSP, x )
-        dspResult = dspResult[1:decimation:end]
+    if method_exists( DSP.firfilt, ( typeof(h), typeof(x) ))
+        @printf( "\n\tNaive decimation with DSP.firfilt\n\t\t")
+        @time begin
+            dspResult = DSP.firfilt( h, x )
+            dspResult = dspResult[1:decimation:end]
+        end
     end
 
     @printf( "\n\tMultirate.filt decimation. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
@@ -141,7 +143,7 @@ function test_interpolation( h, x, interpolation )
     println( "| |\\ |  |  |___ |__/ |__] |    |  | |__|  |  | |  | |\\ | " )
     println( "| | \\|  |  |___ |  \\ |    |___ |__| |  |  |  | |__| | \\| " )
     println()
-    println( "Testing interpolation. xLen = $xLen, hLen = $hLen, interpolation = $interpolation")
+    println( "Testing interpolation, $(eltype(h)) & $(eltype(x)). xLen = $xLen, hLen = $hLen, interpolation = $interpolation")
 
     @printf( "\n\tNaive interpolation with Base.filt\n\t\t")
     @time begin
@@ -152,15 +154,15 @@ function test_interpolation( h, x, interpolation )
         baseResult = Base.filt( h, one(eltype(h)), xZeroStuffed )
     end
 
-    @printf( "\n\tNaive interpolation with DSP.firfilt\n\t\t")
-    hDSP = h
-    eltype( hDSP ) == eltype( x ) || (hDSP = eltype( x )[ he for he in h ])
-    @time begin
-        xZeroStuffed = zeros( eltype(x), xLen * interpolation )
-        for n = 0:xLen-1;
-            xZeroStuffed[ n*interpolation+1 ] = x[ n+1 ]
+    if method_exists( DSP.firfilt, ( typeof(h), typeof(x) ))
+        @printf( "\n\tNaive interpolation with DSP.firfilt\n\t\t")
+        @time begin
+            xZeroStuffed = zeros( eltype(x), xLen * interpolation )
+            for n = 0:xLen-1;
+                xZeroStuffed[ n*interpolation+1 ] = x[ n+1 ]
+            end
+            dspResult = DSP.firfilt( h, xZeroStuffed )
         end
-        dspResult = DSP.firfilt( hDSP, xZeroStuffed )
     end
 
     @printf( "\n\tMultirate.filt interpolation. length( x1 ) = %d, length( x2 ) = %d\n\t\t", length( x1 ), length( x2 ) )
@@ -213,7 +215,7 @@ function test_rational( h, x, ratio )
     println( "|__/ |___ [__  |__| |\\/| |__] |    |___ |__/ " )
     println( "|  \\ |___ ___] |  | |  | |    |___ |___ |  \\ " )
     println()
-    println( "Testing rational resampling. xLen = $xLen, hLen = $hLen, ratio = $ratio")
+    println( "Testing rational resampling, $(eltype(h)) & $(eltype(x)). xLen = $xLen, hLen = $hLen, ratio = $ratio")
 
     @printf( "\n\tNaive rational resampling with Base.filt\n\t\t")
     @time begin
@@ -227,25 +229,21 @@ function test_rational( h, x, ratio )
         baseResult = Base.filt( h, one(eltype(h)), xStuffed );
         baseResult = [ baseResult[n] for n = 1:downfactor:length( baseResult ) ]
     end
-
-    @printf( "\n\tNaive rational resampling DSP.firfilt\n\t\t")
-    hDSP = h
-    eltype( hDSP ) == eltype( x ) || (hDSP = eltype( x )[ he for he in h ])
-    @time begin
-        xStuffed  = zeros( resultType, length(x) * upfactor )
-        dspResult = Array( resultType, int( ceil( length(x) * ratio )))
-
-        for n = 0:length(x)-1;
-            xStuffed[ n*upfactor+1 ] = x[ n+1 ]
+    
+    if method_exists( DSP.firfilt, ( typeof(h), typeof(x) ))
+        @printf( "\n\tNaive rational resampling DSP.firfilt\n\t\t")
+        @time begin
+            xStuffed  = zeros( resultType, length(x) * upfactor )
+            dspResult = Array( resultType, int( ceil( length(x) * ratio )))
+        
+            for n = 0:length(x)-1;
+                xStuffed[ n*upfactor+1 ] = x[ n+1 ]
+            end
+        
+            dspResult = DSP.firfilt( h, xStuffed );
+            dspResult = [ dspResult[n] for n = 1:downfactor:length( dspResult ) ]
         end
-
-        dspResult = DSP.firfilt( hDSP, xStuffed );
-        dspResult = [ dspResult[n] for n = 1:downfactor:length( dspResult ) ]
     end
-
-    @printf( "\n\tIPPDSP.filt\n\t\t")
-    self = IPPDSP.FIRFilter( eltype(x), h, upfactor, downfactor )
-    @time ippResult = IPPDSP.filt( self, x )
 
     @printf( "\n\tMultirate.filt rational resampling. Single pass over all %d elements.\n\t\t", xLen )
     self = Multirate.FIRFilter( h, ratio )
@@ -283,11 +281,15 @@ end
 
 
 function test_all()
-    for interpolation in 1:32, decimation in 1:32
-        h    = rand(Float32, rand(16:128,1)[1] )
+    for interpolation in 1:16,
+            decimation in 1:16,
+                Th in [Float32, Float64],
+                    Tx in [Float32, Float64, Complex64, Complex128]
+        
+        h    = rand(Th, rand(16:128,1)[1] )
         xLen = int(rand( 1000:2000, 1 )[1])
         xLen = xLen-mod( xLen, decimation )
-        x    = rand( Float32, xLen )
+        x    = rand( Tx, xLen )
 
         @test test_singlerate( h, x )
         @test test_decimation( h, x, decimation )
