@@ -46,10 +46,6 @@ function freqz( coefficients::Vector )
     return t
 end
 
-function freqz( FIR::FIRFilter )
-   freqz( FIR.coefficients ) 
-end
-
 
 #==============================================================================#
 #                               Plot Constellation                             #
