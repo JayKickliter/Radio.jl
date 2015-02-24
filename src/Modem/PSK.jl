@@ -2,6 +2,13 @@ abstract Modem
 abstract CodingScheme
 
 
+
+################################################################################
+#               ____ _  _ ____ ____ ___  _ _  _ ____                           #
+#               |___ |\ | |    |  | |  \ | |\ | | __                           #
+#               |___ | \| |___ |__| |__/ | | \| |__]                           #
+################################################################################                                     
+                                     
 type Gray <: CodingScheme end
 
 
@@ -23,6 +30,13 @@ decode{T<:CodingScheme}( ::Type{T}, N::AbstractVector ) = [ decode( T, n) for n 
 
 
 
+
+################################################################################
+#                                ___  ____ _  _                                #
+#                                |__] [__  |_/                                 #
+#                                |    ___] | \_                                #
+################################################################################                                     
+
 type PSKModem
     M::Integer                     # Modulation order, or bits per symbol. The constellation has M^2 symbols
     constellation::Vector{Complex} # ideal symbol constellation
@@ -36,20 +50,13 @@ function PSKModem( M::Integer )
 end
 
 
-function symbol2index( symbol::Complex, constellationSize::Integer )
-    ϕ = angle( symbol )
 
-    if ϕ < 0
-        ϕ += 2*pi
-    end
-    
-    α = (constellationSize)/(2*pi)
-    
-    index = int(α * ϕ) + 1
-    
-    index = index > constellationSize ? 0 : index
-    return index
-end
+
+################################################################################
+#                                _  _ ____ ___                                 #
+#                                |\/| |  | |  \                                #
+#                                |  | |__| |__/                                #
+################################################################################                                     
 
 function modulate( modem::PSKModem, bits::Integer )
     modem.constellation[decode( Gray, bits )+1]
@@ -59,6 +66,14 @@ function modulate( modem, data::AbstractVector )
     [ modulate( modem, datum ) for datum in data ]
 end
 
+
+
+
+################################################################################
+#                           ___  ____ _  _ ____ ___                            #
+#                           |  \ |___ |\/| |  | |  \                           #
+#                           |__/ |___ |  | |__| |__/                           #
+################################################################################     
 
 function demodulate( modem::PSKModem, symbol::Complex )
     ϕ = angle( symbol )
