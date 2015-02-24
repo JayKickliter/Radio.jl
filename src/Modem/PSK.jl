@@ -9,6 +9,7 @@ function encode( ::Type{Gray}, n::Integer )
     n $ (n >> 1)
 end
 
+encode{T<:CodingScheme}( ::Type{T}, N::AbstractVector ) = [ encode( T, n) for n in N ]
 
 function decode( ::Type{Gray}, n::Integer )
     p = n
@@ -18,7 +19,7 @@ function decode( ::Type{Gray}, n::Integer )
      return p
 end
 
-encode{T<:CodingScheme}( ::Type{T}, N::AbstractVector ) = [ encode( T, n) for n in N ]
+decode{T<:CodingScheme}( ::Type{T}, N::AbstractVector ) = [ decode( T, n) for n in N ]
 
 
 
@@ -30,28 +31,28 @@ end
 function PSKModem( M::Integer )
     ispow2( M ) || error( "M must be a power of 2" )
     Δ𝜙            = 2π/M
-    constellation = [ exp(Δ𝜙*im*decode( Gray, i)) for i in 0: M-1 ]
+    constellation = [ exp(Δ𝜙*im*i) for i in 0: M-1 ]
     PSKModem( M, constellation )
 end
 
 
 function symbol2index( symbol::Complex, constellationSize::Integer )
-    θ = angle( symbol )
+    ϕ = angle( symbol )
 
-    if θ < 0
-        θ += 2*pi
+    if ϕ < 0
+        ϕ += 2*pi
     end
     
     α = (constellationSize)/(2*pi)
     
-    index = int(α * θ) + 1
+    index = int(α * ϕ) + 1
     
     index = index > constellationSize ? 0 : index
     return index
 end
 
 function modulate( modem::PSKModem, bits::Integer )
-    modem.constellation[bits+1]
+    modem.constellation[decode( Gray, bits )+1]
 end
 
 function modulate( modem, data::AbstractVector )
@@ -60,10 +61,10 @@ end
 
 
 function demodulate( modem::PSKModem, symbol::Complex )
-    θ = angle( symbol )
-    θ = θ < 0 ? θ += 2π : θ
+    ϕ = angle( symbol )
+    ϕ = ϕ < 0 ? ϕ += 2π : ϕ
     
-    bits = int( θ*modem.M / 2π )
+    bits = int( ϕ*modem.M / 2π )
     encode( Gray, bits )
 end
 
@@ -76,10 +77,10 @@ end
 
 #=
 
-modem   = PSKModem( 4 )
+modem   = PSKModem( 16 )
 data    = [0:modem.M-1]
 symbols = modulate( modem, data)
-plot(symbols)
+scatter( symbols, "o", xlabel="I", ylabel="Q" )
 demodulate( modem, symbols )
 
 =# 
