@@ -23,19 +23,15 @@ encode{T<:CodingScheme}( ::Type{T}, N::AbstractVector ) = [ encode( T, n) for n 
 
 
 type PSKModem
-    modOrder::Integer                   # Modulation order, or bits per symbol. The constellation has modOrder^2 symbols
+    M::Integer                     # Modulation order, or bits per symbol. The constellation has M^2 symbols
     constellation::Vector{Complex} # ideal symbol constellation
 end
 
-function PSKModem( symbols::Integer )
-    ispow2( symbols ) || error( "symbols must be a power of 2" )
-    
-    modOrder      = log2( symbols )
-    Δ𝜙            = 2π/symbols
-    # constellation = [ exp(Δ𝜙*im*decode( Gray, i)) for i in 0: symbols-1 ]
-    constellation = [ exp(Δ𝜙*im*i) for i in 0: symbols-1 ]
-    
-    return PSKModem( modOrder, constellation )
+function PSKModem( M::Integer )
+    ispow2( M ) || error( "M must be a power of 2" )
+    Δ𝜙            = 2π/M
+    constellation = [ exp(Δ𝜙*im*decode( Gray, i)) for i in 0: M-1 ]
+    PSKModem( M, constellation )
 end
 
 
@@ -54,20 +50,20 @@ function symbol2index( symbol::Complex, constellationSize::Integer )
     return index
 end
 
-function modulate( modem::PSKModem, datum::Integer )
-    modem.constellation[decode(Gray, datum)+1]
+function modulate( modem::PSKModem, bits::Integer )
+    modem.constellation[bits+1]
 end
 
 function modulate( modem, data::AbstractVector )
     [ modulate( modem, datum ) for datum in data ]
 end
 
-# https://www.rocq.inria.fr/scicos/ScicosModNum/modnum_web/src/modnum_421/interf/scicos/help/eng/htm/DEMODPSK_f.htm
+
 function demodulate( modem::PSKModem, symbol::Complex )
     θ = angle( symbol )
     θ = θ < 0 ? θ += 2π : θ
     
-    bits = int( ( θ*modem.modOrder^2 )/2π )
+    bits = int( θ*modem.M / 2π )
     encode( Gray, bits )
 end
 
@@ -81,9 +77,9 @@ end
 #=
 
 modem   = PSKModem( 4 )
-data    = [0:2^modem.modOrder-1]
+data    = [0:modem.M-1]
 symbols = modulate( modem, data)
 plot(symbols)
 demodulate( modem, symbols )
 
-=#
+=# 
