@@ -39,19 +39,18 @@ function PSKModem( symbols::Integer )
 end
 
 
-function symbol2index( symbol::Complex, contelationSize::Integer )
+function symbol2index( symbol::Complex, constellationSize::Integer )
     θ = angle( symbol )
-    println( "θ = ", θ )
+
     if θ < 0
-        θ = 2*pi + θ
+        θ += 2*pi
     end
-    println( "θ = ", θ )
     
-    α = (contelationSize)/(2*pi)
+    α = (constellationSize)/(2*pi)
     
     index = int(α * θ) + 1
     
-    index = index > contelationSize ? 0 : index
+    index = index > constellationSize ? 0 : index
     return index
 end
 
@@ -63,11 +62,13 @@ function modulate( modem, data::AbstractVector )
     [ modulate( modem, datum ) for datum in data ]
 end
 
+# https://www.rocq.inria.fr/scicos/ScicosModNum/modnum_web/src/modnum_421/interf/scicos/help/eng/htm/DEMODPSK_f.htm
 function demodulate( modem::PSKModem, symbol::Complex )
-    index = symbol2index( symbol, length(modem.constellation) )
-    # display(index)
-    # bits = modem.constellation[index]
-    return encode( Gray, index-1 )
+    θ = angle( symbol )
+    θ = θ < 0 ? θ += 2π : θ
+    
+    bits = int( ( θ*modem.modOrder^2 )/2π )
+    encode( Gray, bits )
 end
 
 function demodulate( modem, symbols::AbstractVector{Complex} )
@@ -79,14 +80,10 @@ end
 
 #=
 
-
-
 modem   = PSKModem( 4 )
 data    = [0:2^modem.modOrder-1]
 symbols = modulate( modem, data)
 plot(symbols)
 demodulate( modem, symbols )
 
-angle( symbols )
 =#
-
