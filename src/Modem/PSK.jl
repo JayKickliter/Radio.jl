@@ -16,7 +16,6 @@ function encode( ::Type{Gray}, n::Integer )
     n $ (n >> 1)
 end
 
-encode{T<:CodingScheme}( ::Type{T}, N::AbstractVector ) = [ encode( T, n) for n in N ]
 
 function decode( ::Type{Gray}, n::Integer )
     p = n
@@ -26,6 +25,8 @@ function decode( ::Type{Gray}, n::Integer )
      return p
 end
 
+
+encode{T<:CodingScheme}( ::Type{T}, N::AbstractVector ) = [ encode( T, n) for n in N ]
 decode{T<:CodingScheme}( ::Type{T}, N::AbstractVector ) = [ decode( T, n) for n in N ]
 
 
@@ -38,8 +39,8 @@ decode{T<:CodingScheme}( ::Type{T}, N::AbstractVector ) = [ decode( T, n) for n 
 ################################################################################                                     
 
 type PSKModem
-    M::Integer                     # Modulation order, or bits per symbol. The constellation has M^2 symbols
-    constellation::Vector{Complex} # ideal symbol constellation
+    M::Integer                     # Number of symbols in the constellation
+    constellation::Vector{Complex} # Symbol constellation
 end
 
 function PSKModem( M::Integer )
@@ -62,6 +63,7 @@ function modulate( modem::PSKModem, bits::Integer )
     modem.constellation[decode( Gray, bits )+1]
 end
 
+
 function modulate( modem, data::AbstractVector )
     [ modulate( modem, datum ) for datum in data ]
 end
@@ -83,6 +85,7 @@ function demodulate( modem::PSKModem, symbol::Complex )
     encode( Gray, bits )
 end
 
+
 function demodulate( modem, symbols::AbstractVector{Complex} )
     [ demodulate( modem, symbol ) for symbol in symbols ]
 end
@@ -91,11 +94,14 @@ end
 
 
 #=
+using Winston
 
-modem   = PSKModem( 16 )
+modem   = PSKModem( 8 )
 data    = [0:modem.M-1]
 symbols = modulate( modem, data)
-scatter( symbols, "o", xlabel="I", ylabel="Q" )
+plot( symbols, "o-", xlabel="I", ylabel="Q" )
 demodulate( modem, symbols )
+
+
 
 =# 
