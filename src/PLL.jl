@@ -7,13 +7,14 @@ end
 
 PLL( α = 0.002, β = sqrt( α ) ) = PLL( α, β, 0.0, 0.0 )
 
-function exec( pll::PLL, x::Real )
-    x  = exp( x * im) 
+function exec( pll::PLL, x::Complex )
     y  = exp( pll.ϕ * im )
     Δϕ = angle( x * conj(y) )
     pll.ƒ += pll.α * Δϕ
     pll.ϕ += pll.β * Δϕ
     pll.ϕ += pll.ƒ
+    
+    return y
 end
 
 function exec{T}( pll::PLL, x::AbstractVector{T} )
@@ -30,4 +31,4 @@ y = exec( pll, x)
 
 
 using Winston
-plot( t, x, "b", t, y)
+plot( t, real(x), t, real(y), "b")
