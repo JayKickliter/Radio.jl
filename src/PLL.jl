@@ -16,9 +16,18 @@ function exec( pll::PLL, x::Complex )
     pll.ϕ += pll.β * Δϕ
     pll.ϕ += pll.ƒ
     
-    return y
+    return y, Δϕ
 end
 
 function exec{T}( pll::PLL, x::AbstractVector{T} )
-    T[ exec( pll, x ) for x in x ]
+    y = Array( T, length(x) )
+    e = Array( typeof(real(x[1])), length(x) )
+
+    for i in 1:length( x )
+        ( yi, ei ) = exec( pll, x[i] )
+        y[i] = yi
+        e[i] = ei
+    end
+    
+    return y, e
 end
