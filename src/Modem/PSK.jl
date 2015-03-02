@@ -90,6 +90,23 @@ function demodulate( modem, symbols::AbstractVector{Complex} )
     [ demodulate( modem, symbol ) for symbol in symbols ]
 end
 
+# function Winston.plot( modem::PSKModem )
+#     p             = scatter( modem.constellation )
+#     M             = modem.M
+#     constellation = modem.constellation
+#     for i in 0:M-1
+#         symbol = constellation[ i + 1 ]
+#         x      = real( symbol )
+#         y      = imag( symbol )
+#         bits   = decode( Gray, i )
+#
+#         println( x, " ", y, " ", bin(bits) )
+#
+#         add( p, PlotLabel(x*0.05, y*0.05, bin(bits)) )
+#     end
+#
+#     return p
+# end
 
 
 
