@@ -9,7 +9,7 @@ function PLL( α = 0.002, β = sqrt( α ) )
     PLL( α, β, 0.0, 0.0 )
 end
 
-function exec( pll::PLL, x::Complex )
+function exec( pll::PLL, x::Number )
     y  = exp( pll.ϕ * im )
     Δϕ = angle( x * conj(y) )
     pll.ƒ += pll.α * Δϕ
@@ -31,3 +31,4 @@ function exec{T}( pll::PLL, x::AbstractVector{T} )
     
     return y, e
 end
+
