@@ -1,14 +1,17 @@
-using Winston
-using Radio
-using DSP
+import Radio
+import DSP
 
 M          = 8
 modulation = Radio.PSK(M)
 modem      = Radio.Modem( modulation, samplesPerSymbol=2 )
-data       = rand( 0:M-1, 1000 )
-txSymbols  = Radio.modulate( modem, data ) 
+txData     = rand( 0:M-1, 1000 )
+symbols    = Radio.modulate( modem, txData )
+rxData     = Radio.demodulate( modem, symbols )
 
-spectrum =  DSP.periodogram( txSymbols )
+spectrum =  DSP.periodogram( symbols )
 
-p = plot(fftshift(log10(abs2(fft(txSymbols)))))
+
+
+using Winston
+p = plot(fftshift(log10(abs2(fft(symbols)))))
 display( p )

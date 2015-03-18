@@ -61,11 +61,12 @@ function demodulate( psk::PSK, symbol::Complex )
     ϕ = ϕ < 0 ? ϕ += 2π : ϕ
     
     index = int( ϕ*psk.M / 2π ) + 1
+    index = mod1( index, psk.M )
     psk.bitsMap[index]
 end
 
 
-function demodulate( psk, symbols::AbstractVector{Complex} )
+function demodulate( psk::PSK, symbols::AbstractVector )
     Int[ demodulate( psk, symbol ) for symbol in symbols ]
 end
 

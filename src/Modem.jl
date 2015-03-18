@@ -19,12 +19,17 @@ function Modem( modulation::Modulation; samplesPerSymbol::Real = 2, pulseShape =
     span       = int( numTaps/samplesPerSymbol )
     taps       = pulseShape( excessBandwidth, span, samplesPerSymbol )
     txFilter   = FIRFilter( taps, resampRate )  
-    rxFilter   = txFilter
+    rxFilter   = FIRFilter( taps, 1/resampRate )  
     
     Modem( modulation, samplesPerSymbol, txFilter, rxFilter )
 end
 
-function modulate( modem::Modem, data )
+function modulate( modem::Modem, data::AbstractVector )
     symbols       = modulate( modem.modulation, data )
     resampSymbols = filt( modem.txFilter, symbols )
+end
+
+function demodulate( modem::Modem, symbols::AbstractVector )
+    resampSymbols = filt( modem.rxFilter, symbols )
+    data          = demodulate( modem.modulation, resampSymbols )
 end
