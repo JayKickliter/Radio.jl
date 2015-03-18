@@ -24,7 +24,7 @@ function Modem( modulation::Modulation; samplesPerSymbol::Real = 2, pulseShape =
     Modem( modulation, samplesPerSymbol, txFilter, rxFilter )
 end
 
-function mod( modem::Modem, data )
+function modulate( modem::Modem, data )
     symbols       = modulate( modem.modulation, data )
-    resampSymbols = filt( modem.txFilter, data )
+    resampSymbols = filt( modem.txFilter, symbols )
 end
