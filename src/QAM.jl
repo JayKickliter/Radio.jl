@@ -1,31 +1,27 @@
-include( "../coding.jl" )
-
-abstract Modem
-
 ################################################################################
 #                                ____ ____ _  _                                #
 #                                |  | |__| |\/|                                #
 #                                |_\| |  | |  |                                #
 ################################################################################                                     
 
-type QAMModem
+type QAM <: Modulation
     M::Int                              # Number of symbols in the constellation
     m::Int                              # Bits per symbol
     α::Real                             # Symbol scaling factor
     β::Real                             # Symbol offset
-    constellation::Vector               # Symbol constellation
-    grayConstellation::Vector           # Symbol constellation with gray code
+    constellation::Vector               # Constellation of symbols in original
+    grayConstellation::Vector           # Constellation of symbols inn gray-code order
     bitsMap::Vector                     # bitsMap[i] maps to constellation[i]
 end
 
-function QAMModem( M::Integer )
+function QAM( M::Integer )
     isinteger(sqrt(M)) || error( "sqrt(M) must be an integer value" )
     m                 = int(log2( M ))
     width             = int(sqrt(M))
     constellation     = Array( Complex64, M )
     grayConstellation = Array( Complex64, M )
     bitsMap           = Array( Int, M )
-    α                 = 2*alpha(M)
+    α                 = 2/sqrt( (M-1) * 2/3 ) # scaling factor
     β                 = (-width+1)/2
 
     # http://www.gaussianwaves.com/2012/10/constructing-a-rectangular-constellation-for-16-qam/
@@ -38,26 +34,13 @@ function QAMModem( M::Integer )
         inPhase                    = decode(Gray, inPhase)
         quadrature                 = decode(Gray, quadrature)
         grayConstellation[idx + 1] = α * Complex( inPhase+β, quadrature+β )
-
     end
 
-    QAMModem( M, m, α, β, constellation, grayConstellation, bitsMap )
+    QAM( M, m, α, β, constellation, grayConstellation, bitsMap )
 end
 
-function Base.show( io::IO, modem::QAMModem )
-    @printf( io, "QAMModem{%d}\n", modem.m )
-end
-
-
-
-################################################################################
-#                           ____ _    ___  _  _ ____                           #
-#                           |__| |    |__] |__| |__|                           #
-#                           |  | |___ |    |  | |  |                           #
-################################################################################                                     
-
-function alpha( M::Integer )
-    1/sqrt( (M-1) * 2/3 )
+function Base.show( io::IO, modem::QAM )
+    @printf( io, "QAM{%d}\n", modem.m )
 end
 
 
@@ -69,12 +52,12 @@ end
 #                                |  | |__| |__/                                #
 ################################################################################                                     
 
-function modulate( modem::QAMModem, bits::Integer )
+function modulate( modem::QAM, bits::Integer )
     modem.grayConstellation[ bits+1 ]
 end
 
 
-function modulate( modem::QAMModem, data::Vector )
+function modulate( modem::QAM, data::Vector )
     [ modulate( modem, datum ) for datum in data ]
 end
 
@@ -87,7 +70,7 @@ end
 #                           |__/ |___ |  | |__| |__/                           #
 ################################################################################     
 
-function demodulate( modem::QAMModem, symbol::Complex )
+function demodulate( modem::QAM, symbol::Complex )
     symbol     = symbol / modem.α
     inPhase    = int( real( symbol ) - modem.β )
     quadrature = int( imag( symbol ) - modem.β )
@@ -97,7 +80,7 @@ function demodulate( modem::QAMModem, symbol::Complex )
 end
 
 
-function demodulate( modem::QAMModem, symbols::Vector )
+function demodulate( modem::QAM, symbols::Vector )
     Int[ demodulate( modem, symbol ) for symbol in symbols ]
 end
 
@@ -113,7 +96,7 @@ end
 #=
 
 M         = 16
-modem     = QAMModem( M )
+modem     = QAM( M )
 modData   = rand(0:M-1, M*4)
 symbols   = modulate( modem, modData)
 symbols   = symbols .* 1.05 
@@ -123,7 +106,7 @@ Test.@test_approx_eq modData demodData
 
 using PyPlot
 
-function PyPlot.plot( modem::QAMModem )
+function PyPlot.plot( modem::QAM )
     fig = figure()
     scatter( real(modem.constellation), imag(modem.constellation) )
     

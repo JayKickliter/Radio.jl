@@ -1,14 +1,10 @@
-include( "../coding.jl" )
-
-abstract Modem
-
 ################################################################################
 #                                ___  ____ _  _                                #
 #                                |__] [__  |_/                                 #
 #                                |    ___] | \_                                #
 ################################################################################                                     
 
-type PSKModem
+type PSK <: Modulation
     M::Int                             # Number of symbols in the constellation
     m::Int                             # Bits per symbol
     constellation::Vector{Complex}     # Symbol constellation
@@ -16,14 +12,14 @@ type PSKModem
     bitsMap::Vector{Int}               # bitsMap[i] maps to constellation[i]
 end
 
-function PSKModem( M::Integer )
+function PSK( M::Integer )
     ispow2( M ) || error( "M must be a power of 2" )
     Δϕ                = 2π/M
     bitsMap           = [ encode( Gray, i ) for i in 0:M-1 ]
     constellation     = [ exp(Δϕ*im*i) for i in 0:M-1 ]
     grayConstellation = [ exp(Δϕ*im*decode( Gray, i)) for i in 0:M-1 ]    
     m                 = log2( M )
-    PSKModem( M, m, constellation, grayConstellation, bitsMap )
+    PSK( M, m, constellation, grayConstellation, bitsMap )
 end
 
 
@@ -35,7 +31,7 @@ end
 #                                |  | |__| |__/                                #
 ################################################################################                                     
 
-function modulate( modem::PSKModem, bits::Integer )
+function modulate( modem::PSK, bits::Integer )
     modem.grayConstellation[ bits+1 ]
 end
 
@@ -53,7 +49,7 @@ end
 #                           |__/ |___ |  | |__| |__/                           #
 ################################################################################     
 
-function demodulate( modem::PSKModem, symbol::Complex )
+function demodulate( modem::PSK, symbol::Complex )
     ϕ = angle( symbol )
     ϕ = ϕ < 0 ? ϕ += 2π : ϕ
     
@@ -79,7 +75,7 @@ end
 
 using PyPlot
 
-function PyPlot.plot( modem::PSKModem )
+function PyPlot.plot( modem::PSK )
     fig = figure()
     scatter( real(modem.constellation), imag(modem.constellation) )
     plot( real(modem.grayConstellation), imag(modem.grayConstellation) )
@@ -100,7 +96,7 @@ function PyPlot.plot( modem::PSKModem )
     return fig
 end
 
-modem   = PSKModem( 4 )
+modem   = PSK( 4 )
 
 plot( modem )
 

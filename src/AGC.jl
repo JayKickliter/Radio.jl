@@ -35,7 +35,7 @@ function exec{T}( agc::AGC, x::Vector{T} )
     T[ exec( agc, xx) for xx in x ]
 end
 
-
+#=
 include( "Modem/QAM.jl" )
 
 agc        = AGC(1e-1)
@@ -57,3 +57,4 @@ plot( imag(symbols), "g" )
 subplot( 2, 1, 2 )
 plot( real(agcSymbols), "b" )
 plot( imag(agcSymbols), "g" )
+=#

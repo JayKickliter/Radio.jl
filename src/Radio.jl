@@ -1,59 +1,24 @@
 module Radio
 
-# firfilt is needed by several Radio functions
-# import DSP: firfilt
+import DSP: FIRFilter, filt
 
-include( "Filter/FIRDesign.jl"  )
-include( "Filter/FIRFilter.jl"  )
-include( "Filter/Nyquist.jl"    )
-include( "Filter/Resample.jl"   )
-include( "Filter/Window.jl"     )
-include( "Math/CZT.jl"          )
-include( "Math/Misc.jl"         )
-include( "Math/Power.jl"        )
-include( "Modulation/PSK.jl"    )
-include( "Random/Noise.jl"      )
-include( "Support/Constants.jl" )
-include( "Support/Types.jl"     )
-include( "Support/Graphics.jl"  )
+abstract Modulation
+
+include( "AGC.jl" )
+include( "coding.jl" )
+include( "PLL.jl" )
+include( "PSK.jl" )
+include( "QAM.jl" )
+include( "Nyquist.jl" )
+include( "Modem.jl" )
 
 export
-    # Filter
-    FIR_TYPE,
-    firprototype,
-    firdes,
-    rcos,
-    rrcos,
-    blackman,
-    hamming,
-    hann,
-    kaiser,
-    rectangle,
-    kaiserord,
-    filt,
-    decimate,
-    resample,
-    interpolate,
-    upsample,
-    
-    # Math
-    czt,
-    rms,
-    similarzeros,
-    
-    # Random
-    wgn,
-    
-    # Modulation
-    pskmod,
-    
-    # Support
-    freqz,
-    plot_constellation,
-    plot_spectrum,
-    POWER_VOLTS,
-    POWER_WATTS,
-    POWER_DBM,
-    POWER_DBW
+    AGC,
+    Modem,
+    PSK,
+    QAM,
+    exec,
+    modulate,
+    demodulate
 
 end # Radio module
