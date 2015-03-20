@@ -7,7 +7,7 @@
 
 function rcos( β, span, sps )
     # TODO: add argument valdiation
-    hlen = sps*span
+    hlen = int(sps*span)
     hlen = iseven(hlen) ? hlen+1 : hlen
     h    = Array( Float64, hlen )
     
@@ -32,7 +32,7 @@ end
 
 function rrcos( β, span, sps )
     # TODO: add argument valdiation
-    hlen = sps*span
+    hlen = int(sps*span)
     hlen = iseven(hlen) ? hlen+1 : hlen
     h    = Array( Float64, hlen )
     
