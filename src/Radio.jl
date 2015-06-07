@@ -1,5 +1,7 @@
 module Radio
 
+VERSION < v"0.4-" && using Docile
+
 import DSP: FIRFilter, filt
 
 abstract Modulation
