@@ -16,8 +16,8 @@ end
 
 function QAM( M::Integer )
     isinteger(sqrt(M)) || error( "sqrt(M) must be an integer value" )
-    m                 = int(log2( M ))
-    width             = int(sqrt(M))
+    m                 = floor(Int, log2( M ))
+    width             = floor(Int, sqrt(M))
     constellation     = Array( Complex64, M )
     grayConstellation = Array( Complex64, M )
     bitsMap           = Array( Int, M )
@@ -28,7 +28,7 @@ function QAM( M::Integer )
 
     for idx in 0:M-1
         inPhase                    = idx >> div( m, 2 )
-        quadrature                 = idx & int(exp2(m/2)-1)
+        quadrature                 = idx & floor(Int, exp2(m/2)-1)
         constellation[idx + 1]     = α * Complex( inPhase+β, quadrature+β )
         bitsMap[idx + 1]           = (encode(Gray, inPhase) << div( m, 2 )) | encode(Gray, quadrature)
         inPhase                    = decode(Gray, inPhase)
